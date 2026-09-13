@@ -25,12 +25,12 @@ dependencies = [
 requires = ["setuptools>=68.0"]
 build-backend = "setuptools.backends._legacy:_Backend"
 
-[tool.pytest]
+[tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
-python_files = "test_*.py"
-python_classes = "Test*"
-python_functions = "test_*"
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
 
 [tool.uv]
 dev-dependencies = [

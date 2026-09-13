@@ -1,14 +1,4 @@
-from fastapi import Request
-from app.dependencies.auth import get_current_user, CurrentUser
-
-def setup_dependencies(app: FastAPI) -> None:
-    pass
-
-async def get_current_user(request: Request) -> CurrentUser:
-    token = request.headers.get("Authorization", "").replace("Bearer ", "")
-    # Verify token via Better Auth or authlib
-    # Returns CurrentUser with id, email, name, role
-    return CurrentUser(id="user_123", email="test@example.com", name="Test", role="rep")
+from app.dependencies.auth import setup_dependencies, get_current_user, CurrentUser
 
 def get_pagination_params(skip: int = 0, limit: int = 25):
     return {"skip": skip, "limit": limit}

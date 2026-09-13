@@ -21,3 +21,6 @@ class ListResponse:
 
 def list_input_validator(q: str = "", sort: str = "", dir: str = "asc", page: int = 1, page_size: int = 25, filters: dict = None):
     return ListInput(q=q, sort=sort, dir=dir, page=page, page_size=page_size, filters=filters)
+
+def build_list_response(rows, total, facet_counts=None):
+    return {"rows": rows, "total": total, "facetCounts": facet_counts or {}}

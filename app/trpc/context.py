@@ -13,3 +13,6 @@ def get_trpc_context(request: Request) -> TrpcContext:
     if token:
         user = CurrentUser(id="", email="", name="", role="rep")
     return TrpcContext(user=user, request=request)
+
+def setup_trpc(app):
+    pass

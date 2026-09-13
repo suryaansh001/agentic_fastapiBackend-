@@ -21,3 +21,15 @@ class ActivityStampService:
         pass
 
 activity_stamp = ActivityStampService()
+
+async def stamp_last_activity(company_id=None, contact_id=None, deal_id=None):
+    await activity_stamp.stamp_last_activity(company_id, contact_id, deal_id)
+
+async def stamp_stage_change(deal_id: str, stage: str):
+    now = datetime.utcnow()
+    from app.database.models import Deal
+    async with async_session_factory() as session:
+        deal = await session.get(Deal, deal_id)
+        if deal:
+            deal.stage = stage
+            await session.commit()

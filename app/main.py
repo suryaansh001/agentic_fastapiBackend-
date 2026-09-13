@@ -1,17 +1,18 @@
 from fastapi import FastAPI
 from app.config.settings import settings
-from app.database.session import engine
-from app.database.models import Base
+from app.database.session import engine, Base
 from contextlib import asynccontextmanager
+from sqlalchemy import create_engine as sync_engine
 from app.dependencies import setup_dependencies
 from app.middlewares import setup_middlewares
 from app.trpc.context import setup_trpc
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    sync = sync_engine(settings.DATABASE_URL.replace("sqlite+aiosqlite", "sqlite"), echo=False)
+    Base.metadata.create_all(sync)
     yield
+    sync.dispose()
     await engine.dispose()
 
 def setup_app(app: FastAPI) -> None:
@@ -30,7 +31,7 @@ def setup_app(app: FastAPI) -> None:
     from app.settings.router import router as settings_router
     from app.saved_views.router import router as saved_views_router
     from app.dashboard.router import router as dashboard_router
-    from app.cache.module import router as cache_router
+    from app.cache.router import router as cache_router
     from app.archive.router import router as archive_router
     from app.currency.router import router as currency_router
     from app.api_keys.router import router as api_keys_router
@@ -45,6 +46,12 @@ def setup_app(app: FastAPI) -> None:
     from app.microsoft.router import router as microsoft_router
     from app.backfill.router import router as backfill_router
     from app.conversations.router import router as conversations_router
+    from app.agent.router import router as agent_router
+    from app.agent.internal_router import router as internal_agent_router
+    from app.agent.agents.root.router import router as root_agent_router
+    from app.agent.agents.builder.router import router as builder_agent_router
+    from app.agent.agents.runner.router import router as runner_agent_router
+    from app.agent.llm_router import router as llm_router
 
     app.include_router(auth_router, prefix="/api/auth")
     app.include_router(companies_router, prefix="/api/companies")
@@ -72,6 +79,12 @@ def setup_app(app: FastAPI) -> None:
     app.include_router(microsoft_router, prefix="/api/microsoft")
     app.include_router(backfill_router, prefix="/api/backfill")
     app.include_router(conversations_router, prefix="/api/conversations")
+    app.include_router(agent_router)
+    app.include_router(internal_agent_router, prefix="")
+    app.include_router(root_agent_router)
+    app.include_router(builder_agent_router)
+    app.include_router(runner_agent_router)
+    app.include_router(llm_router)
 
 def create_app() -> FastAPI:
     app = FastAPI(
