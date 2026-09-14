@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import FileResponse
 from app.dependencies.auth import get_current_user, CurrentUser
 from app.agent.agents.runner.tools import RunnerAgentTools
 from app.agent.agents.runner.tools import (
@@ -6,7 +7,9 @@ from app.agent.agents.runner.tools import (
     InspectRunInput, PostSlackMessageInput, QueryCRMInput,
     ReadCRMRecordInput, ReadFileInput, TodoInput, WebFetchInput,
     WebSearchInput, WriteFileInput, BashInput,
+    ExecutePythonInput, CreateChartInput, GeneratePDFInput,
 )
+import os
 
 router = APIRouter(prefix="/api/agents/runner", tags=["runner-agent"])
 tools = RunnerAgentTools()
@@ -19,7 +22,22 @@ def ask_question(input_data: AskQuestionInput, current_user: CurrentUser = Depen
 
 @router.post("/bash")
 def bash(input_data: BashInput, current_user: CurrentUser = Depends(get_current_user)):
-    return tools.bash(input_data.command)
+    return tools.bash(input_data)
+
+
+@router.post("/execute_python")
+def execute_python(input_data: ExecutePythonInput, current_user: CurrentUser = Depends(get_current_user)):
+    return tools.execute_python(input_data)
+
+
+@router.post("/create_chart")
+def create_chart(input_data: CreateChartInput, current_user: CurrentUser = Depends(get_current_user)):
+    return tools.create_chart(input_data)
+
+
+@router.post("/generate_pdf")
+def generate_pdf(input_data: GeneratePDFInput, current_user: CurrentUser = Depends(get_current_user)):
+    return tools.generate_pdf(input_data)
 
 
 @router.post("/create_crm_activity")
@@ -85,3 +103,26 @@ def web_search(input_data: WebSearchInput, current_user: CurrentUser = Depends(g
 @router.post("/write_file")
 def write_file(input_data: WriteFileInput, current_user: CurrentUser = Depends(get_current_user)):
     return tools.write_file(input_data)
+
+
+@router.get("/files/{file_path:path}")
+def get_file(file_path: str, current_user: CurrentUser = Depends(get_current_user)):
+    """Serve generated files (charts, PDFs) for viewing/downloading"""
+    allowed_dirs = ["/tmp", "/home/suri/proj/crm/backend/tmp"]
+    full_path = None
+    for base in allowed_dirs:
+        candidate = os.path.join(base, file_path)
+        if os.path.exists(candidate) and os.path.isfile(candidate):
+            full_path = candidate
+            break
+    if not full_path:
+        for base in allowed_dirs:
+            candidate = os.path.join(base, os.path.basename(file_path))
+            if os.path.exists(candidate) and os.path.isfile(candidate):
+                full_path = candidate
+                break
+    if not full_path:
+        raise HTTPException(status_code=404, detail="File not found")
+    ext = os.path.splitext(file_path)[1].lower()
+    media_type = "application/pdf" if ext == ".pdf" else ("image/svg+xml" if ext == ".svg" else "image/png")
+    return FileResponse(full_path, media_type=media_type, filename=os.path.basename(file_path))
