@@ -114,7 +114,12 @@ class AgentService:
         return {"id": agent_id, "name": "", "status": "DELETED", "disabledTriggers": 0, "cancelledRuns": 0}
 
     async def run_now(self, input_data: dict, user_id: str) -> dict:
-        agent_id = input_data["agent_id"]
+        # Accept either a dict or the AgentRunNowInput pydantic model.
+        agent_id = (
+            input_data.agent_id
+            if hasattr(input_data, "agent_id")
+            else input_data["agent_id"]
+        )
         async with async_session_factory() as session:
             result = await session.execute(
                 select(AgentDefinition).where(AgentDefinition.id == agent_id)
@@ -123,6 +128,7 @@ class AgentService:
         if not agent or agent.status != "LIVE":
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Agent is not live")
         run_id = str(uuid.uuid4())
+        task_id = str(uuid.uuid4())
         async with async_session_factory() as session:
             session.add(AgentRun(
                 id=run_id,
@@ -131,10 +137,24 @@ class AgentService:
                 trigger_type="MANUAL",
                 initiated_by_id=user_id,
                 status="QUEUED",
+                input=input_data,
+            ))
+            # Durable task the worker claims (FOR UPDATE SKIP LOCKED). The
+            # payload links the task back to this run so the worker can
+            # transition it through the run lifecycle.
+            session.add(AgentTask(
+                id=task_id,
+                agent_id=agent_id,
+                kind="agent-run",
+                reason="Manual run",
+                priority=500,
+                budget=4,
+                due_at=datetime.utcnow(),
+                payload={"run_id": run_id},
             ))
             await session.commit()
         self.trigger.deployed_agent_run_queued()
-        return {"id": run_id}
+        return {"id": run_id, "taskId": task_id}
 
     async def retry_run(self, agent_id: str, run_id: str, user_id: str) -> dict:
         return {"id": str(uuid.uuid4())}

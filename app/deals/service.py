@@ -1,4 +1,5 @@
 from typing import Optional, Dict
+from datetime import datetime
 from app.database.models import Deal, DealStage
 from app.database.session import async_session_factory
 from sqlalchemy import select, func
@@ -22,6 +23,11 @@ class DealsService:
 
     async def create(self, data: dict) -> Deal:
         async with async_session_factory() as session:
+            if "expected_close_date" in data and isinstance(data["expected_close_date"], str):
+                try:
+                    data["expected_close_date"] = datetime.fromisoformat(data["expected_close_date"])
+                except (ValueError, TypeError):
+                    data["expected_close_date"] = None
             deal = Deal(**data)
             session.add(deal)
             await session.commit()

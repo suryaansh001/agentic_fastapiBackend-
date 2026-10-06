@@ -49,7 +49,6 @@ def setup_app(app: FastAPI) -> None:
     from app.agent.router import router as agent_router
     from app.agent.internal_router import router as internal_agent_router
     from app.agent.agents.root.router import router as root_agent_router
-    from app.agent.agents.builder.router import router as builder_agent_router
     from app.agent.agents.runner.router import router as runner_agent_router
     from app.agent.unified_router import router as unified_agent_router
     from app.agent.llm_router import router as llm_router
@@ -83,7 +82,6 @@ def setup_app(app: FastAPI) -> None:
     app.include_router(agent_router)
     app.include_router(internal_agent_router, prefix="")
     app.include_router(root_agent_router)
-    app.include_router(builder_agent_router)
     app.include_router(runner_agent_router)
     app.include_router(unified_agent_router)
     app.include_router(llm_router)

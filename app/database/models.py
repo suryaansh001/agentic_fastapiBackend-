@@ -659,6 +659,7 @@ class AgentRun(Base):
     )
     summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     result: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    input: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
     model_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     input_tokens: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     output_tokens: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
@@ -669,6 +670,7 @@ class AgentRun(Base):
     finished_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     idempotency_key: Mapped[Optional[str]] = mapped_column(String, nullable=True, index=True)
     correlation_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    graph_thread_id: Mapped[Optional[str]] = mapped_column(String, nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     agent: Mapped["AgentDefinition"] = relationship("AgentDefinition", back_populates="runs")

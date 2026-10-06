@@ -33,6 +33,13 @@ class Settings(BaseSettings):
     ARCHIVE_RETENTION_DAYS: int = Field(180, env="ARCHIVE_RETENTION_DAYS")
     CACHE_TTL_MS: int = Field(60000, env="CACHE_TTL_MS")
     ENRICHMENT_POLL_MS: int = Field(30000, env="ENRICHMENT_POLL_MS")
+    ENV: str = Field("production", env="ENV")
+    AUTH_DEV_MODE: bool = Field(False, env="AUTH_DEV_MODE")
+    AGENT_WORKSPACE_ROOT: str = Field("./agent_workspace", env="AGENT_WORKSPACE_ROOT")
+    AGENT_MAX_ITERATIONS: int = Field(15, env="AGENT_MAX_ITERATIONS")
+    AGENT_MAX_TOOL_SECONDS: int = Field(60, env="AGENT_MAX_TOOL_SECONDS")
+    WEB_FETCH_TIMEOUT_SECONDS: float = Field(15.0, env="WEB_FETCH_TIMEOUT_SECONDS")
+    WEB_FETCH_MAX_BYTES: int = Field(1048576, env="WEB_FETCH_MAX_BYTES")
 
     class Config:
         env_file = ".env"

@@ -9,9 +9,12 @@ os.environ["APP_URL"] = "http://localhost:3000"
 os.environ["REDIS_URL"] = ""
 os.environ["BLOB_READ_WRITE_TOKEN"] = ""
 os.environ["AGENT_BRIDGE_SECRET"] = "test-bridge-secret"
-os.environ["ALLOWED_SIGN_IN"] = "*"
+# Dev-mode allow-list: explicit emails only, never "*".
+os.environ["ALLOWED_SIGN_IN"] = "test@example.com"
+os.environ["AUTH_DEV_MODE"] = "true"
 os.environ["CRON_SECRET"] = "test-cron-secret-key"
 os.environ["DEBUG"] = "true"
+os.environ["ENV"] = "test"
 os.environ["CONTEXT_DEV_API_KEY"] = ""
 os.environ["PERPLEXITY_API_KEY"] = ""
 os.environ["AI_GATEWAY_API_KEY"] = ""
@@ -29,52 +32,63 @@ os.environ["OLLAMA_BASE_URL"] = "http://localhost:11434"
 os.environ["OLLAMA_MODEL"] = "llama3.1"
 os.environ["GROQ_API_KEY"] = "gsk_test_key_for_testing"
 os.environ["GROQ_MODEL"] = "llama-3.1-70b-versatile"
+os.environ["AGENT_WORKSPACE_ROOT"] = "./agent_workspace"
 
 import pytest
 from fastapi import FastAPI
-from app.agent.router import router as agent_router
-from app.agent.internal_router import router as internal_agent_router
-from app.agent.agents.root.router import router as root_agent_router
-from app.agent.agents.builder.router import router as builder_agent_router
-from app.agent.agents.runner.router import router as runner_agent_router
+from jose import jwt
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
-from app.database.models import User, Company, Contact, Deal
+from app.database.models import User, Member, Company, Contact, Deal
 
 DATABASE_URL = "sqlite+aiosqlite:///./test.db"
+SECRET_KEY = "test-secret-key"
+TEST_USER_ID = "user_1"
+
 engine_test = create_async_engine(DATABASE_URL, echo=False)
 async_session_factory_test = async_sessionmaker(engine_test, class_=AsyncSession, expire_on_commit=False)
 
+
 def create_test_app():
-    from fastapi import FastAPI
     from app.agent.router import router as agent_router
     from app.agent.internal_router import router as internal_agent_router
     from app.agent.agents.root.router import router as root_agent_router
-    from app.agent.agents.builder.router import router as builder_agent_router
     from app.agent.agents.runner.router import router as runner_agent_router
     app = FastAPI(title="Agentic CRM API", version="0.1.0")
-    for router in [agent_router, internal_agent_router, root_agent_router, builder_agent_router, runner_agent_router]:
+    for router in [agent_router, internal_agent_router, root_agent_router, runner_agent_router]:
         app.include_router(router)
     return app
 
-def auth_headers():
-    return {"Authorization": "Bearer test-token"}
+
+def mint_token(user_id: str = TEST_USER_ID) -> str:
+    """Mint a valid HS256 token for tests, mirroring authenticate_token."""
+    return jwt.encode({"sub": user_id}, SECRET_KEY, algorithm="HS256")
+
+
+def auth_headers(user_id: str = TEST_USER_ID) -> dict:
+    return {"Authorization": f"Bearer {mint_token(user_id)}"}
+
+
+def dev_headers(email: str = "test@example.com") -> dict:
+    """Dev-mode headers (no bearer token); only works when AUTH_DEV_MODE is on."""
+    return {"X-Dev-User-Email": email}
+
 
 @pytest.fixture
 async def seed_data():
+    """Idempotent seed: baseline rows are already inserted by the
+    conftest setup_db fixture; this only inserts when missing."""
     async with async_session_factory_test() as session:
-        user = User(id="user_1", name="Test User", email="test@example.com", role="owner")
-        company = Company(id="company_1", name="Acme Corp", domain="acme.com", website="https://acme.com")
-        contact = Contact(id="contact_1", first_name="John", last_name="Doe", email="john@acme.com", company_id="company_1")
-        deal = Deal(id="deal_1", name="Enterprise Deal", company_id="company_1", owner_id="user_1", stage="DEMO_BOOKED", amount=50000.0)
-        session.add_all([user, company, contact, deal])
-        await session.commit()
-        await session.refresh(user)
-        await session.refresh(company)
-        await session.refresh(contact)
-        await session.refresh(deal)
+        if await session.get(User, TEST_USER_ID) is None:
+            user = User(id=TEST_USER_ID, name="Test User", email="test@example.com")
+            member = Member(id="member_1", organization_id="org_1", user_id=TEST_USER_ID, role="owner")
+            company = Company(id="company_1", name="Acme Corp", domain="acme.com", website="https://acme.com")
+            contact = Contact(id="contact_1", first_name="John", last_name="Doe", email="john@acme.com", company_id="company_1")
+            deal = Deal(id="deal_1", name="Enterprise Deal", company_id="company_1", owner_id=TEST_USER_ID, stage="DEMO_BOOKED", amount=50000.0)
+            session.add_all([user, member, company, contact, deal])
+            await session.commit()
         return {
-            "user": {"id": user.id, "name": user.name, "email": user.email, "role": user.role},
-            "company": {"id": company.id, "name": company.name, "domain": company.domain},
-            "contact": {"id": contact.id, "first_name": contact.first_name, "last_name": contact.last_name, "email": contact.email},
-            "deal": {"id": deal.id, "name": deal.name, "stage": deal.stage, "amount": deal.amount},
+            "user": {"id": TEST_USER_ID, "name": "Test User", "email": "test@example.com"},
+            "company": {"id": "company_1", "name": "Acme Corp", "domain": "acme.com"},
+            "contact": {"id": "contact_1", "first_name": "John", "last_name": "Doe", "email": "john@acme.com"},
+            "deal": {"id": "deal_1", "name": "Enterprise Deal", "stage": "DEMO_BOOKED", "amount": 50000.0},
         }

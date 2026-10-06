@@ -1,122 +1,33 @@
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
 from app.dependencies.auth import get_current_user, CurrentUser
-from app.agent.agents.runner.tools import RunnerAgentTools
-from app.agent.agents.runner.tools import (
-    AskQuestionInput, CreateCrmActivityInput, FinishRunInput,
-    InspectRunInput, PostSlackMessageInput, QueryCRMInput,
-    ReadCRMRecordInput, ReadFileInput, TodoInput, WebFetchInput,
-    WebSearchInput, WriteFileInput, BashInput,
-    ExecutePythonInput, CreateChartInput, GeneratePDFInput,
-)
 import os
 
 router = APIRouter(prefix="/api/agents/runner", tags=["runner-agent"])
-tools = RunnerAgentTools()
 
+# Tool endpoints are intentionally NOT exposed here. Agent tools are invoked
+# only by the AgentExecutionEngine through the canonical tool registry.
+# This router only serves generated artifacts (charts, PDFs) for viewing.
 
-@router.post("/ask_question")
-def ask_question(input_data: AskQuestionInput, current_user: CurrentUser = Depends(get_current_user)):
-    return tools.ask_question(input_data)
-
-
-@router.post("/bash")
-def bash(input_data: BashInput, current_user: CurrentUser = Depends(get_current_user)):
-    return tools.bash(input_data)
-
-
-@router.post("/execute_python")
-def execute_python(input_data: ExecutePythonInput, current_user: CurrentUser = Depends(get_current_user)):
-    return tools.execute_python(input_data)
-
-
-@router.post("/create_chart")
-def create_chart(input_data: CreateChartInput, current_user: CurrentUser = Depends(get_current_user)):
-    return tools.create_chart(input_data)
-
-
-@router.post("/generate_pdf")
-def generate_pdf(input_data: GeneratePDFInput, current_user: CurrentUser = Depends(get_current_user)):
-    return tools.generate_pdf(input_data)
-
-
-@router.post("/create_crm_activity")
-def create_crm_activity(input_data: CreateCrmActivityInput, current_user: CurrentUser = Depends(get_current_user)):
-    return tools.create_crm_activity(input_data)
-
-
-@router.post("/finish_run")
-def finish_run(input_data: FinishRunInput, current_user: CurrentUser = Depends(get_current_user)):
-    return tools.finish_run(input_data)
-
-
-@router.post("/glob")
-def glob(pattern: str = "", current_user: CurrentUser = Depends(get_current_user)):
-    return tools.glob(pattern)
-
-
-@router.post("/grep")
-def grep(pattern: str, path: str = None, current_user: CurrentUser = Depends(get_current_user)):
-    return tools.grep(pattern, path)
-
-
-@router.post("/inspect_run")
-def inspect_run(input_data: InspectRunInput, current_user: CurrentUser = Depends(get_current_user)):
-    return tools.inspect_run(input_data)
-
-
-@router.post("/post_slack_message")
-def post_slack_message(input_data: PostSlackMessageInput, current_user: CurrentUser = Depends(get_current_user)):
-    return tools.post_slack_message(input_data)
-
-
-@router.post("/query_crm")
-def query_crm(input_data: QueryCRMInput, current_user: CurrentUser = Depends(get_current_user)):
-    return tools.query_crm(input_data)
-
-
-@router.post("/read_crm_record")
-def read_crm_record(input_data: ReadCRMRecordInput, current_user: CurrentUser = Depends(get_current_user)):
-    return tools.read_crm_record(input_data)
-
-
-@router.post("/read_file")
-def read_file(input_data: ReadFileInput, current_user: CurrentUser = Depends(get_current_user)):
-    return tools.read_file(input_data)
-
-
-@router.post("/todo")
-def todo(input_data: TodoInput, current_user: CurrentUser = Depends(get_current_user)):
-    return tools.todo(input_data)
-
-
-@router.post("/web_fetch")
-def web_fetch(input_data: WebFetchInput, current_user: CurrentUser = Depends(get_current_user)):
-    return tools.web_fetch(input_data)
-
-
-@router.post("/web_search")
-def web_search(input_data: WebSearchInput, current_user: CurrentUser = Depends(get_current_user)):
-    return tools.web_search(input_data)
-
-
-@router.post("/write_file")
-def write_file(input_data: WriteFileInput, current_user: CurrentUser = Depends(get_current_user)):
-    return tools.write_file(input_data)
+ALLOWED_DIRS = ["/tmp", os.environ.get("AGENT_WORKSPACE_ROOT", "./agent_workspace")]
 
 
 @router.get("/files/{file_path:path}")
 def get_file(file_path: str, current_user: CurrentUser = Depends(get_current_user)):
     """Serve generated files (charts, PDFs) for viewing/downloading"""
-    allowed_dirs = ["/tmp", "/home/suri/proj/crm/backend/tmp"]
     full_path = None
-    for base in allowed_dirs:
-        candidate = os.path.join(base, file_path)
+    if os.path.isabs(file_path):
+        candidate = os.path.normpath(file_path)
         if os.path.exists(candidate) and os.path.isfile(candidate):
             full_path = candidate
-            break
     if not full_path:
-        for base in allowed_dirs:
+        for base in ALLOWED_DIRS:
+            candidate = os.path.join(base, file_path)
+            if os.path.exists(candidate) and os.path.isfile(candidate):
+                full_path = candidate
+                break
+    if not full_path:
+        for base in ALLOWED_DIRS:
             candidate = os.path.join(base, os.path.basename(file_path))
             if os.path.exists(candidate) and os.path.isfile(candidate):
                 full_path = candidate
