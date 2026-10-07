@@ -1,11 +1,12 @@
 from fastapi import APIRouter, Depends
 from app.dependencies.auth import get_current_user, CurrentUser
+from app.telemetry.otel import get_spans
 
 router = APIRouter()
 
 @router.get("/")
 async def list_items(current_user: CurrentUser = Depends(get_current_user)):
-    return {"items": []}
+    return {"spans": get_spans()}
 
 @router.get("/{id}")
 async def get_item(id: str, current_user: CurrentUser = Depends(get_current_user)):

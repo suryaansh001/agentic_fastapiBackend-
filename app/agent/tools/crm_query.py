@@ -61,6 +61,15 @@ def _serialize(value: Any) -> Any:
 class CrmQueryService:
     """Read-only CRM queries. Each operation is an allow-listed, parameterized query."""
 
+    async def list_companies(
+        self,
+        session: AsyncSession,
+        limit: Any = 25,
+    ) -> Dict[str, Any]:
+        stmt = select(Company).limit(_limit(limit)).order_by(Company.created_at.desc())
+        rows = await _rows(session, stmt)
+        return {"operation": "list_companies", "count": len(rows), "rows": [[_serialize(v) for v in r.values()] for r in rows], "columns": list(rows[0].keys()) if rows else []}
+
     async def list_deals(
         self,
         session: AsyncSession,
@@ -173,6 +182,7 @@ class CrmQueryService:
 
     # Operation registry: name -> (handler, required params, optional params)
     OPERATIONS = {
+        "list_companies": (list_companies, [], ["limit"]),
         "list_deals": (list_deals, [], ["stage", "owner_id", "company_id", "limit"]),
         "search_contacts": (search_contacts, [], ["query", "limit"]),
         "search_companies": (search_companies, [], ["query", "limit"]),

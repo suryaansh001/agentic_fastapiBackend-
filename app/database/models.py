@@ -71,6 +71,7 @@ class User(Base):
     id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     name: Mapped[str] = mapped_column(String)
     email: Mapped[str] = mapped_column(String, unique=True, index=True)
+    password_hash: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     email_verified: Mapped[bool] = mapped_column(Boolean, default=False)
     image: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
@@ -671,6 +672,8 @@ class AgentRun(Base):
     idempotency_key: Mapped[Optional[str]] = mapped_column(String, nullable=True, index=True)
     correlation_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     graph_thread_id: Mapped[Optional[str]] = mapped_column(String, nullable=True, index=True)
+    parent_run_id: Mapped[Optional[str]] = mapped_column(String, ForeignKey("agentRun.id"), nullable=True, index=True)
+    child_run_ids: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     agent: Mapped["AgentDefinition"] = relationship("AgentDefinition", back_populates="runs")
@@ -816,6 +819,30 @@ class AgentRunIdempotency(Base):
     run_id: Mapped[str] = mapped_column(String, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
+
+class AgentApproval(Base):
+    """Durable human-in-the-loop approval.
+
+    One row per gated tool call. Created (PENDING) when the
+    engine pauses at an approval gate; decided (APPROVED /
+    DENIED) through the approval API. ``idempotency_key``
+    makes approval decisions safely retryable.
+    """
+
+    __tablename__ = "agentApproval"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    run_id: Mapped[str] = mapped_column(String, ForeignKey("agentRun.id"), nullable=False, index=True)
+    tool_call_id: Mapped[str] = mapped_column(String, nullable=False)
+    tool_name: Mapped[str] = mapped_column(String, nullable=False)
+    args: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    status: Mapped[str] = mapped_column(String, default="PENDING", index=True)
+    approver_id: Mapped[Optional[str]] = mapped_column(String, ForeignKey("user.id"), nullable=True)
+    idempotency_key: Mapped[Optional[str]] = mapped_column(String, nullable=True, unique=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    decided_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+    run: Mapped["AgentRun"] = relationship("AgentRun")
 
 class LLMCallLog(Base):
     __tablename__ = "llmCallLog"

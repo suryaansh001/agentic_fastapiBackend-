@@ -27,6 +27,7 @@ def test_registry_has_all_tools(registry):
         "post_slack_message",
         "read_crm_record",
         "read_file",
+        "spawn_subagent",
         "todo",
         "web_fetch",
         "web_search",
@@ -64,6 +65,17 @@ async def test_execute_query_crm_returns_seed_data(registry, db_session):
     assert "id" in result["columns"]
     id_idx = result["columns"].index("id")
     assert any(row[id_idx] == "deal_1" for row in result["rows"])
+
+
+@pytest.mark.asyncio
+async def test_execute_query_crm_lists_companies(registry, db_session):
+    ctx = ToolContext(user_id="user_1", session=db_session)
+    result = await registry.execute(
+        "query_crm", {"operation": "list_companies", "params": {"limit": 10}}, ctx
+    )
+    assert result["success"] is True
+    name_idx = result["columns"].index("name")
+    assert any(row[name_idx] == "Acme Corp" for row in result["rows"])
 
 
 @pytest.mark.asyncio

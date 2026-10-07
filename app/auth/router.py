@@ -1,7 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, EmailStr
-from typing import Optional
-from app.dependencies.auth import get_current_user, CurrentUser, require_role
+from app.dependencies.auth import get_current_user, CurrentUser
 from app.auth.service import AuthService
 
 router = APIRouter()
@@ -21,7 +20,10 @@ class SignInResponse(BaseModel):
 
 @router.post("/sign-in")
 async def sign_in(payload: SignInPayload):
-    return {"token": "", "user": {}}
+    try:
+        return await AuthService().sign_in(payload.email, payload.password)
+    except ValueError as error:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(error)) from error
 
 @router.post("/sign-up")
 async def sign_up(payload: SignUpPayload):

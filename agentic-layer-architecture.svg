@@ -1,0 +1,252 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="1420" viewBox="0 0 1800 1420" role="img" aria-labelledby="title desc">
+  <title id="title">Agentic Layer Architecture</title>
+  <desc id="desc">Detailed architecture of the durable FastAPI agentic layer, including API entrypoints, task dispatch, LangGraph execution, native LLM tool calling, approval gates, subagents, tools, persistence, and external providers.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="11" markerHeight="11" refX="10" refY="5" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L11,5 L0,10 z" fill="#475569"/>
+    </marker>
+    <marker id="blue-arrow" markerWidth="11" markerHeight="11" refX="10" refY="5" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L11,5 L0,10 z" fill="#2563eb"/>
+    </marker>
+    <marker id="green-arrow" markerWidth="11" markerHeight="11" refX="10" refY="5" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L11,5 L0,10 z" fill="#15803d"/>
+    </marker>
+    <marker id="amber-arrow" markerWidth="11" markerHeight="11" refX="10" refY="5" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L11,5 L0,10 z" fill="#b45309"/>
+    </marker>
+    <filter id="shadow" x="-15%" y="-15%" width="130%" height="140%">
+      <feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#0f172a" flood-opacity="0.12"/>
+    </filter>
+    <style>
+      .title { font: 700 34px sans-serif; fill: #0f172a; }
+      .subtitle { font: 400 17px sans-serif; fill: #475569; }
+      .layer-title { font: 700 19px sans-serif; fill: #0f172a; }
+      .box-title { font: 700 15px sans-serif; fill: #0f172a; }
+      .box-text { font: 400 12px sans-serif; fill: #334155; }
+      .small { font: 400 12px sans-serif; fill: #475569; }
+      .tiny { font: 400 11px sans-serif; fill: #64748b; }
+      .flow-label { font: 700 11px sans-serif; fill: #334155; }
+      .layer { fill: #f8fafc; stroke: #cbd5e1; stroke-width: 2; }
+      .api { fill: #dbeafe; stroke: #2563eb; stroke-width: 2; }
+      .runtime { fill: #ede9fe; stroke: #7c3aed; stroke-width: 2; }
+      .tool { fill: #ffedd5; stroke: #ea580c; stroke-width: 2; }
+      .store { fill: #dcfce7; stroke: #16a34a; stroke-width: 2; }
+      .external { fill: #f1f5f9; stroke: #64748b; stroke-width: 2; }
+      .human { fill: #fef3c7; stroke: #d97706; stroke-width: 2; }
+      .legacy { fill: #fee2e2; stroke: #dc2626; stroke-width: 2; stroke-dasharray: 8 6; }
+      .line { stroke: #475569; stroke-width: 2.2; fill: none; marker-end: url(#arrow); }
+      .blue-line { stroke: #2563eb; stroke-width: 2.6; fill: none; marker-end: url(#blue-arrow); }
+      .green-line { stroke: #15803d; stroke-width: 2.2; fill: none; marker-end: url(#green-arrow); }
+      .amber-line { stroke: #b45309; stroke-width: 2.2; fill: none; marker-end: url(#amber-arrow); }
+      .dashed { stroke-dasharray: 8 6; }
+    </style>
+  </defs>
+
+  <rect width="1800" height="1420" fill="#ffffff"/>
+  <text x="54" y="54" class="title">Agentic Layer Architecture</text>
+  <text x="54" y="82" class="subtitle">Durable FastAPI + LangGraph execution model | implementation-oriented view</text>
+
+  <rect x="54" y="105" width="1692" height="42" rx="9" fill="#f8fafc" stroke="#cbd5e1"/>
+  <rect x="74" y="117" width="17" height="17" rx="4" class="api"/><text x="99" y="130" class="small">API / application</text>
+  <rect x="244" y="117" width="17" height="17" rx="4" class="runtime"/><text x="269" y="130" class="small">Agent runtime</text>
+  <rect x="398" y="117" width="17" height="17" rx="4" class="tool"/><text x="423" y="130" class="small">Tools and side effects</text>
+  <rect x="598" y="117" width="17" height="17" rx="4" class="store"/><text x="623" y="130" class="small">Durable storage</text>
+  <rect x="787" y="117" width="17" height="17" rx="4" class="human"/><text x="812" y="130" class="small">Human approval</text>
+  <rect x="979" y="117" width="17" height="17" rx="4" class="legacy"/><text x="1004" y="130" class="small">Legacy or incomplete path</text>
+  <text x="1360" y="130" class="tiny">Solid arrows = primary flow | dashed arrows = integration or delegation</text>
+
+  <!-- Layer 1 -->
+  <rect x="54" y="175" width="1692" height="150" rx="14" class="layer"/>
+  <text x="76" y="204" class="layer-title">1. Entry and control plane</text>
+  <rect x="80" y="222" width="220" height="76" rx="10" class="api" filter="url(#shadow)"/>
+  <text x="190" y="248" text-anchor="middle" class="box-title">Frontend / API clients</text>
+  <text x="190" y="271" text-anchor="middle" class="box-text">Chat, run-now, cancel, approve</text>
+  <text x="190" y="287" text-anchor="middle" class="box-text">Authenticated user context</text>
+
+  <rect x="340" y="222" width="255" height="76" rx="10" class="api" filter="url(#shadow)"/>
+  <text x="467" y="248" text-anchor="middle" class="box-title">Unified router</text>
+  <text x="467" y="271" text-anchor="middle" class="box-text">POST /api/agents/unified/chat</text>
+  <text x="467" y="287" text-anchor="middle" class="box-text">Approvals and resume endpoints</text>
+
+  <rect x="635" y="222" width="265" height="76" rx="10" class="api" filter="url(#shadow)"/>
+  <text x="767" y="248" text-anchor="middle" class="box-title">Agent management APIs</text>
+  <text x="767" y="271" text-anchor="middle" class="box-text">/api/agents, history, tasks, dispatch</text>
+  <text x="767" y="287" text-anchor="middle" class="box-text">AgentService creates durable runs</text>
+
+  <rect x="940" y="222" width="265" height="76" rx="10" class="api" filter="url(#shadow)"/>
+  <text x="1072" y="248" text-anchor="middle" class="box-title">Internal + domain triggers</text>
+  <text x="1072" y="271" text-anchor="middle" class="box-text">/internal/crm/dispatch</text>
+  <text x="1072" y="287" text-anchor="middle" class="box-text">company, contact, meeting, backfill</text>
+
+  <rect x="1245" y="222" width="415" height="76" rx="10" class="legacy" filter="url(#shadow)"/>
+  <text x="1452" y="248" text-anchor="middle" class="box-title">Direct family routers</text>
+  <text x="1452" y="271" text-anchor="middle" class="box-text">/api/agents/root and /api/agents/runner</text>
+  <text x="1452" y="287" text-anchor="middle" class="box-text">Coexist with canonical engine path</text>
+
+  <path d="M300 260 H340" class="blue-line"/><path d="M595 260 H635" class="blue-line"/>
+  <path d="M900 260 H940" class="blue-line"/><path d="M1205 260 H1245" class="line dashed"/>
+
+  <!-- Layer 2 -->
+  <rect x="54" y="350" width="1692" height="190" rx="14" class="layer"/>
+  <text x="76" y="379" class="layer-title">2. Durable dispatch and execution control</text>
+  <rect x="90" y="400" width="250" height="108" rx="10" class="runtime" filter="url(#shadow)"/>
+  <text x="215" y="428" text-anchor="middle" class="box-title">AgentTriggerService</text>
+  <text x="215" y="451" text-anchor="middle" class="box-text">Enqueues AgentTask</text>
+  <text x="215" y="469" text-anchor="middle" class="box-text">Deduplicates domain work</text>
+  <text x="215" y="487" text-anchor="middle" class="box-text">Pokes dispatch bridge</text>
+
+  <rect x="400" y="400" width="250" height="108" rx="10" class="store" filter="url(#shadow)"/>
+  <text x="525" y="428" text-anchor="middle" class="box-title">AgentTask queue</text>
+  <text x="525" y="451" text-anchor="middle" class="box-text">QUEUED work + payload.run_id</text>
+  <text x="525" y="469" text-anchor="middle" class="box-text">Priority, budget, due_at</text>
+  <text x="525" y="487" text-anchor="middle" class="box-text">Claimed with row locking</text>
+
+  <rect x="710" y="400" width="250" height="108" rx="10" class="runtime" filter="url(#shadow)"/>
+  <text x="835" y="428" text-anchor="middle" class="box-title">AgentWorker</text>
+  <text x="835" y="451" text-anchor="middle" class="box-text">Polls and claims tasks</text>
+  <text x="835" y="469" text-anchor="middle" class="box-text">WorkerExecutor routes by run_id</text>
+  <text x="835" y="487" text-anchor="middle" class="box-text">Bridge handles non-agent tasks</text>
+
+  <rect x="1020" y="400" width="300" height="108" rx="10" class="store" filter="url(#shadow)"/>
+  <text x="1170" y="428" text-anchor="middle" class="box-title">AgentRun lifecycle</text>
+  <text x="1170" y="451" text-anchor="middle" class="box-text">QUEUED -> RUNNING</text>
+  <text x="1170" y="469" text-anchor="middle" class="box-text">WAITING_FOR_APPROVAL -> RUNNING</text>
+  <text x="1170" y="487" text-anchor="middle" class="box-text">SUCCEEDED / FAILED / CANCELLED</text>
+
+  <rect x="1380" y="400" width="300" height="108" rx="10" class="runtime" filter="url(#shadow)"/>
+  <text x="1530" y="428" text-anchor="middle" class="box-title">LangGraphEngine</text>
+  <text x="1530" y="451" text-anchor="middle" class="box-text">AgentExecutionEngine contract</text>
+  <text x="1530" y="469" text-anchor="middle" class="box-text">start_run / resume_run / cancel</text>
+  <text x="1530" y="487" text-anchor="middle" class="box-text">Durable graph state</text>
+
+  <path d="M340 454 H400" class="blue-line"/><path d="M650 454 H710" class="blue-line"/>
+  <path d="M960 454 H1020" class="blue-line"/><path d="M1320 454 H1380" class="blue-line"/>
+  <path d="M525 400 V325" class="green-line dashed"/>
+  <text x="535" y="344" class="flow-label">persist queue</text>
+
+  <!-- Layer 3 -->
+  <rect x="54" y="565" width="1692" height="260" rx="14" class="layer"/>
+  <text x="76" y="594" class="layer-title">3. Agent reasoning loop and policy boundary</text>
+  <rect x="100" y="618" width="260" height="170" rx="10" class="runtime" filter="url(#shadow)"/>
+  <text x="230" y="646" text-anchor="middle" class="box-title">LangGraph state</text>
+  <text x="230" y="671" text-anchor="middle" class="box-text">messages + run metadata</text>
+  <text x="230" y="689" text-anchor="middle" class="box-text">iteration, files, error, depth</text>
+  <text x="230" y="707" text-anchor="middle" class="box-text">START -> agent node</text>
+  <text x="230" y="725" text-anchor="middle" class="box-text">agent -> tools -> agent</text>
+  <text x="230" y="743" text-anchor="middle" class="box-text">END on answer or limit</text>
+  <text x="230" y="766" text-anchor="middle" class="tiny">MAX_ITERATIONS = 15</text>
+
+  <rect x="430" y="618" width="270" height="170" rx="10" class="runtime" filter="url(#shadow)"/>
+  <text x="565" y="646" text-anchor="middle" class="box-title">Agent node</text>
+  <text x="565" y="671" text-anchor="middle" class="box-text">Build provider messages</text>
+  <text x="565" y="689" text-anchor="middle" class="box-text">Pass canonical tool schemas</text>
+  <text x="565" y="707" text-anchor="middle" class="box-text">Call LLMService.chat()</text>
+  <text x="565" y="725" text-anchor="middle" class="box-text">Receive structured tool_calls</text>
+  <text x="565" y="743" text-anchor="middle" class="box-text">Append AIMessage</text>
+
+  <rect x="770" y="618" width="300" height="170" rx="10" class="human" filter="url(#shadow)"/>
+  <text x="920" y="646" text-anchor="middle" class="box-title">Approval gate</text>
+  <text x="920" y="671" text-anchor="middle" class="box-text">Risk tier = approval_required</text>
+  <text x="920" y="689" text-anchor="middle" class="box-text">interrupt({tool_call_id, tool, args})</text>
+  <text x="920" y="707" text-anchor="middle" class="box-text">Persist WAITING_FOR_APPROVAL</text>
+  <text x="920" y="725" text-anchor="middle" class="box-text">Human approve or deny endpoint</text>
+  <text x="920" y="743" text-anchor="middle" class="box-text">resume_run(Command(resume=...))</text>
+  <text x="920" y="766" text-anchor="middle" class="tiny">Gate all calls before execution</text>
+
+  <rect x="1140" y="618" width="260" height="170" rx="10" class="runtime" filter="url(#shadow)"/>
+  <text x="1270" y="646" text-anchor="middle" class="box-title">Tools node</text>
+  <text x="1270" y="671" text-anchor="middle" class="box-text">Build ToolContext</text>
+  <text x="1270" y="689" text-anchor="middle" class="box-text">Execute calls exactly once</text>
+  <text x="1270" y="707" text-anchor="middle" class="box-text">Capture results and files</text>
+  <text x="1270" y="725" text-anchor="middle" class="box-text">Append ToolMessage</text>
+  <text x="1270" y="743" text-anchor="middle" class="box-text">Emit tool telemetry event</text>
+
+  <rect x="1470" y="618" width="210" height="170" rx="10" class="tool" filter="url(#shadow)"/>
+  <text x="1575" y="646" text-anchor="middle" class="box-title">ToolRegistry</text>
+  <text x="1575" y="671" text-anchor="middle" class="box-text">Single tool catalog</text>
+  <text x="1575" y="689" text-anchor="middle" class="box-text">LLM schemas + handlers</text>
+  <text x="1575" y="707" text-anchor="middle" class="box-text">safe / approval / blocked</text>
+  <text x="1575" y="725" text-anchor="middle" class="box-text">Unknown tools rejected</text>
+  <text x="1575" y="743" text-anchor="middle" class="box-text">OpenTelemetry spans</text>
+
+  <path d="M360 703 H430" class="blue-line"/><path d="M700 703 H770" class="amber-line"/>
+  <path d="M1070 703 H1140" class="blue-line"/><path d="M1400 703 H1470" class="blue-line"/>
+  <path d="M1140 770 H565 V788" class="line"/>
+  <text x="1080" y="807" class="flow-label">tool results return to reasoning loop</text>
+
+  <!-- Layer 4 -->
+  <rect x="54" y="850" width="1692" height="210" rx="14" class="layer"/>
+  <text x="76" y="879" class="layer-title">4. Canonical capabilities and delegation</text>
+  <rect x="90" y="905" width="275" height="118" rx="10" class="tool" filter="url(#shadow)"/>
+  <text x="227" y="933" text-anchor="middle" class="box-title">CRM tools</text>
+  <text x="227" y="956" text-anchor="middle" class="box-text">query CRM, read records</text>
+  <text x="227" y="974" text-anchor="middle" class="box-text">create activities, inspect runs</text>
+  <text x="227" y="992" text-anchor="middle" class="box-text">ask questions, finish runs</text>
+
+  <rect x="410" y="905" width="275" height="118" rx="10" class="tool" filter="url(#shadow)"/>
+  <text x="547" y="933" text-anchor="middle" class="box-title">Workspace tools</text>
+  <text x="547" y="956" text-anchor="middle" class="box-text">read, glob, grep files</text>
+  <text x="547" y="974" text-anchor="middle" class="box-text">write generated artifacts</text>
+  <text x="547" y="992" text-anchor="middle" class="box-text">workspace policy boundary</text>
+
+  <rect x="730" y="905" width="275" height="118" rx="10" class="tool" filter="url(#shadow)"/>
+  <text x="867" y="933" text-anchor="middle" class="box-title">Web and messaging</text>
+  <text x="867" y="956" text-anchor="middle" class="box-text">safe web fetch / search</text>
+  <text x="867" y="974" text-anchor="middle" class="box-text">Slack message capability</text>
+  <text x="867" y="992" text-anchor="middle" class="box-text">Risk policy applies per tool</text>
+
+  <rect x="1050" y="905" width="290" height="118" rx="10" class="runtime" filter="url(#shadow)"/>
+  <text x="1195" y="933" text-anchor="middle" class="box-title">Subagent delegation</text>
+  <text x="1195" y="956" text-anchor="middle" class="box-text">spawn child AgentRun + AgentTask</text>
+  <text x="1195" y="974" text-anchor="middle" class="box-text">parent_run_id / child_run_ids</text>
+  <text x="1195" y="992" text-anchor="middle" class="box-text">maximum depth = 3</text>
+
+  <rect x="1385" y="905" width="295" height="118" rx="10" class="legacy" filter="url(#shadow)"/>
+  <text x="1532" y="933" text-anchor="middle" class="box-title">Root CRM service routes</text>
+  <text x="1532" y="956" text-anchor="middle" class="box-text">search, research, enrich, write</text>
+  <text x="1532" y="974" text-anchor="middle" class="box-text">direct HTTP endpoints</text>
+  <text x="1532" y="992" text-anchor="middle" class="box-text">separate from registry dispatch</text>
+
+  <path d="M1575 788 V850" class="blue-line"/>
+  <path d="M227 905 V850" class="line dashed"/><path d="M547 905 V850" class="line dashed"/>
+  <path d="M867 905 V850" class="line dashed"/><path d="M1195 905 V850" class="line dashed"/>
+
+  <!-- Layer 5 -->
+  <rect x="54" y="1085" width="1692" height="245" rx="14" class="layer"/>
+  <text x="76" y="1114" class="layer-title">5. Persistence, integrations, and observability</text>
+  <rect x="90" y="1140" width="360" height="145" rx="10" class="store" filter="url(#shadow)"/>
+  <text x="270" y="1168" text-anchor="middle" class="box-title">PostgreSQL / CRM database</text>
+  <text x="270" y="1191" text-anchor="middle" class="box-text">AgentDefinition + AgentVersion</text>
+  <text x="270" y="1209" text-anchor="middle" class="box-text">AgentRun + AgentTask</text>
+  <text x="270" y="1227" text-anchor="middle" class="box-text">AgentRunEvent + LLMCallLog</text>
+  <text x="270" y="1245" text-anchor="middle" class="box-text">CRM records and domain state</text>
+  <text x="270" y="1263" text-anchor="middle" class="tiny">Lifecycle history is reconstructable</text>
+
+  <rect x="505" y="1140" width="340" height="145" rx="10" class="store" filter="url(#shadow)"/>
+  <text x="675" y="1168" text-anchor="middle" class="box-title">LangGraph checkpoints</text>
+  <text x="675" y="1191" text-anchor="middle" class="box-text">AsyncPostgresSaver</text>
+  <text x="675" y="1209" text-anchor="middle" class="box-text">graph_thread_id = run_id</text>
+  <text x="675" y="1227" text-anchor="middle" class="box-text">Resume after crash or approval pause</text>
+  <text x="675" y="1245" text-anchor="middle" class="box-text">Same PostgreSQL instance</text>
+
+  <rect x="900" y="1140" width="300" height="145" rx="10" class="external" filter="url(#shadow)"/>
+  <text x="1050" y="1168" text-anchor="middle" class="box-title">LLM providers</text>
+  <text x="1050" y="1191" text-anchor="middle" class="box-text">Ollama local model</text>
+  <text x="1050" y="1209" text-anchor="middle" class="box-text">Groq fallback / OpenAI-compatible</text>
+  <text x="1050" y="1227" text-anchor="middle" class="box-text">Native structured tool calls</text>
+  <text x="1050" y="1245" text-anchor="middle" class="box-text">Token and cost logging</text>
+
+  <rect x="1255" y="1140" width="425" height="145" rx="10" class="external" filter="url(#shadow)"/>
+  <text x="1467" y="1168" text-anchor="middle" class="box-title">External systems and runtime outputs</text>
+  <text x="1467" y="1191" text-anchor="middle" class="box-text">Web services, Slack, CRM integrations</text>
+  <text x="1467" y="1209" text-anchor="middle" class="box-text">/tmp and agent workspace artifacts</text>
+  <text x="1467" y="1227" text-anchor="middle" class="box-text">OpenTelemetry traces and metrics</text>
+  <text x="1467" y="1245" text-anchor="middle" class="box-text">Runner file download endpoint</text>
+
+  <path d="M270 1140 V1060" class="green-line"/><path d="M675 1140 V1060" class="green-line"/>
+  <path d="M1050 1140 V1060" class="line dashed"/><path d="M1467 1140 V1060" class="line dashed"/>
+
+  <!-- Bottom flow -->
+  <rect x="90" y="1350" width="1590" height="38" rx="9" fill="#eff6ff" stroke="#93c5fd"/>
+  <text x="885" y="1374" text-anchor="middle" class="small">Primary durable flow: request or trigger -> AgentTask -> worker -> AgentRun -> LangGraph checkpointed loop -> tool or approval -> terminal result</text>
+</svg>

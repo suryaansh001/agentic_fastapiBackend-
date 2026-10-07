@@ -1,0 +1,149 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="1260" viewBox="0 0 1800 1260" role="img" aria-labelledby="title desc">
+  <title id="title">Agentic Layer Only Architecture</title>
+  <desc id="desc">Focused architecture of the agentic runtime: agent requests, durable runs, LangGraph reasoning, LLM providers, approval gates, canonical tools, and subagent delegation.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="11" markerHeight="11" refX="10" refY="5" orient="auto"><path d="M0,0 L11,5 L0,10 z" fill="#475569"/></marker>
+    <marker id="blue-arrow" markerWidth="11" markerHeight="11" refX="10" refY="5" orient="auto"><path d="M0,0 L11,5 L0,10 z" fill="#2563eb"/></marker>
+    <marker id="green-arrow" markerWidth="11" markerHeight="11" refX="10" refY="5" orient="auto"><path d="M0,0 L11,5 L0,10 z" fill="#15803d"/></marker>
+    <marker id="amber-arrow" markerWidth="11" markerHeight="11" refX="10" refY="5" orient="auto"><path d="M0,0 L11,5 L0,10 z" fill="#b45309"/></marker>
+    <filter id="shadow" x="-15%" y="-15%" width="130%" height="140%"><feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#0f172a" flood-opacity="0.12"/></filter>
+    <style>
+      .title { font: 700 34px sans-serif; fill: #0f172a; }
+      .subtitle { font: 400 17px sans-serif; fill: #475569; }
+      .section { font: 700 19px sans-serif; fill: #0f172a; }
+      .bt { font: 700 15px sans-serif; fill: #0f172a; }
+      .tx { font: 400 12px sans-serif; fill: #334155; }
+      .sm { font: 400 12px sans-serif; fill: #475569; }
+      .tiny { font: 400 11px sans-serif; fill: #64748b; }
+      .layer { fill: #f8fafc; stroke: #cbd5e1; stroke-width: 2; }
+      .entry { fill: #dbeafe; stroke: #2563eb; stroke-width: 2; }
+      .runtime { fill: #ede9fe; stroke: #7c3aed; stroke-width: 2; }
+      .tool { fill: #ffedd5; stroke: #ea580c; stroke-width: 2; }
+      .store { fill: #dcfce7; stroke: #16a34a; stroke-width: 2; }
+      .human { fill: #fef3c7; stroke: #d97706; stroke-width: 2; }
+      .external { fill: #f1f5f9; stroke: #64748b; stroke-width: 2; }
+      .line { stroke: #475569; stroke-width: 2.2; fill: none; marker-end: url(#arrow); }
+      .blue { stroke: #2563eb; stroke-width: 2.5; fill: none; marker-end: url(#blue-arrow); }
+      .green { stroke: #15803d; stroke-width: 2.2; fill: none; marker-end: url(#green-arrow); }
+      .amber { stroke: #b45309; stroke-width: 2.2; fill: none; marker-end: url(#amber-arrow); }
+      .dash { stroke-dasharray: 8 6; }
+    </style>
+  </defs>
+  <rect width="1800" height="1260" fill="#ffffff"/>
+  <text x="54" y="54" class="title">Agentic Layer Only</text>
+  <text x="54" y="82" class="subtitle">Reasoning, execution, policy, tools, delegation, and durable agent state</text>
+  <rect x="54" y="105" width="1692" height="42" rx="9" fill="#f8fafc" stroke="#cbd5e1"/>
+  <rect x="74" y="117" width="17" height="17" rx="4" class="entry"/><text x="99" y="130" class="sm">Entry / control</text>
+  <rect x="230" y="117" width="17" height="17" rx="4" class="runtime"/><text x="255" y="130" class="sm">Agent runtime</text>
+  <rect x="394" y="117" width="17" height="17" rx="4" class="tool"/><text x="419" y="130" class="sm">Capabilities</text>
+  <rect x="530" y="117" width="17" height="17" rx="4" class="store"/><text x="555" y="130" class="sm">Durable state</text>
+  <rect x="677" y="117" width="17" height="17" rx="4" class="human"/><text x="702" y="130" class="sm">Human gate</text>
+  <text x="1430" y="130" class="tiny">Canonical path: request -> run -> graph -> tools or approval -> result</text>
+
+  <rect x="54" y="175" width="1692" height="140" rx="14" class="layer"/>
+  <text x="76" y="204" class="section">1. Agent entry and run creation</text>
+  <rect x="90" y="225" width="300" height="68" rx="10" class="entry" filter="url(#shadow)"/>
+  <text x="240" y="250" text-anchor="middle" class="bt">Unified chat request</text>
+  <text x="240" y="272" text-anchor="middle" class="tx">message + history + optional task_id</text>
+  <rect x="450" y="225" width="300" height="68" rx="10" class="entry" filter="url(#shadow)"/>
+  <text x="600" y="250" text-anchor="middle" class="bt">Agent run request</text>
+  <text x="600" y="272" text-anchor="middle" class="tx">manual, trigger, or subagent run</text>
+  <rect x="810" y="225" width="300" height="68" rx="10" class="store" filter="url(#shadow)"/>
+  <text x="960" y="250" text-anchor="middle" class="bt">AgentRun + AgentTask</text>
+  <text x="960" y="272" text-anchor="middle" class="tx">durable identity and queued work</text>
+  <rect x="1170" y="225" width="480" height="68" rx="10" class="runtime" filter="url(#shadow)"/>
+  <text x="1410" y="250" text-anchor="middle" class="bt">AgentExecutionEngine contract</text>
+  <text x="1410" y="272" text-anchor="middle" class="tx">start_run | resume_run | cancel_run | get_state</text>
+  <path d="M390 259 H450" class="blue"/><path d="M750 259 H810" class="blue"/><path d="M1110 259 H1170" class="blue"/>
+
+  <rect x="54" y="340" width="1692" height="230" rx="14" class="layer"/>
+  <text x="76" y="369" class="section">2. Durable execution loop</text>
+  <rect x="90" y="400" width="270" height="135" rx="10" class="runtime" filter="url(#shadow)"/>
+  <text x="225" y="428" text-anchor="middle" class="bt">AgentWorker</text>
+  <text x="225" y="451" text-anchor="middle" class="tx">poll and claim task</text>
+  <text x="225" y="469" text-anchor="middle" class="tx">WorkerExecutor detects run_id</text>
+  <text x="225" y="487" text-anchor="middle" class="tx">dispatches to engine</text>
+  <text x="225" y="513" text-anchor="middle" class="tiny">CRM bridge handles non-agent tasks</text>
+  <rect x="420" y="400" width="300" height="135" rx="10" class="runtime" filter="url(#shadow)"/>
+  <text x="570" y="428" text-anchor="middle" class="bt">LangGraph StateGraph</text>
+  <text x="570" y="451" text-anchor="middle" class="tx">START -> agent node</text>
+  <text x="570" y="469" text-anchor="middle" class="tx">agent -> tools -> agent</text>
+  <text x="570" y="487" text-anchor="middle" class="tx">END on answer or limit</text>
+  <text x="570" y="513" text-anchor="middle" class="tiny">MAX_ITERATIONS = 15</text>
+  <rect x="780" y="400" width="300" height="135" rx="10" class="runtime" filter="url(#shadow)"/>
+  <text x="930" y="428" text-anchor="middle" class="bt">Agent node</text>
+  <text x="930" y="451" text-anchor="middle" class="tx">build provider messages</text>
+  <text x="930" y="469" text-anchor="middle" class="tx">pass ToolRegistry schemas</text>
+  <text x="930" y="487" text-anchor="middle" class="tx">call LLMService.chat()</text>
+  <text x="930" y="513" text-anchor="middle" class="tx">receive structured tool_calls</text>
+  <rect x="1140" y="400" width="270" height="135" rx="10" class="runtime" filter="url(#shadow)"/>
+  <text x="1275" y="428" text-anchor="middle" class="bt">Tools node</text>
+  <text x="1275" y="451" text-anchor="middle" class="tx">create ToolContext</text>
+  <text x="1275" y="469" text-anchor="middle" class="tx">execute calls exactly once</text>
+  <text x="1275" y="487" text-anchor="middle" class="tx">capture results and files</text>
+  <text x="1275" y="513" text-anchor="middle" class="tx">append ToolMessage</text>
+  <rect x="1470" y="400" width="210" height="135" rx="10" class="store" filter="url(#shadow)"/>
+  <text x="1575" y="428" text-anchor="middle" class="bt">Checkpoint</text>
+  <text x="1575" y="451" text-anchor="middle" class="tx">AsyncPostgresSaver</text>
+  <text x="1575" y="469" text-anchor="middle" class="tx">thread_id = run_id</text>
+  <text x="1575" y="487" text-anchor="middle" class="tx">crash-resumable state</text>
+  <path d="M360 467 H420" class="blue"/><path d="M720 467 H780" class="blue"/><path d="M1080 467 H1140" class="blue"/><path d="M1410 467 H1470" class="green"/>
+  <path d="M1275 535 V555 H930 V535" class="line"/>
+  <text x="1075" y="565" class="tiny">tool result returns to agent node</text>
+
+  <rect x="54" y="595" width="1692" height="230" rx="14" class="layer"/>
+  <text x="76" y="624" class="section">3. Model, policy, and human-in-the-loop boundary</text>
+  <rect x="90" y="655" width="300" height="135" rx="10" class="external" filter="url(#shadow)"/>
+  <text x="240" y="683" text-anchor="middle" class="bt">LLMService</text>
+  <text x="240" y="706" text-anchor="middle" class="tx">provider selection and fallback</text>
+  <text x="240" y="724" text-anchor="middle" class="tx">native function calling</text>
+  <text x="240" y="742" text-anchor="middle" class="tx">token, cost, and call logging</text>
+  <text x="240" y="768" text-anchor="middle" class="tiny">Ollama -> Groq fallback</text>
+  <rect x="450" y="655" width="300" height="135" rx="10" class="tool" filter="url(#shadow)"/>
+  <text x="600" y="683" text-anchor="middle" class="bt">ToolRegistry</text>
+  <text x="600" y="706" text-anchor="middle" class="tx">single catalog of tools</text>
+  <text x="600" y="724" text-anchor="middle" class="tx">LLM schemas + handlers</text>
+  <text x="600" y="742" text-anchor="middle" class="tx">safe / approval / blocked</text>
+  <text x="600" y="768" text-anchor="middle" class="tiny">unknown tools rejected</text>
+  <rect x="810" y="655" width="330" height="135" rx="10" class="human" filter="url(#shadow)"/>
+  <text x="975" y="683" text-anchor="middle" class="bt">Approval interrupt</text>
+  <text x="975" y="706" text-anchor="middle" class="tx">risk = approval_required</text>
+  <text x="975" y="724" text-anchor="middle" class="tx">pause before any tool executes</text>
+  <text x="975" y="742" text-anchor="middle" class="tx">WAITING_FOR_APPROVAL</text>
+  <text x="975" y="768" text-anchor="middle" class="tiny">approve or deny -> resume_run</text>
+  <rect x="1200" y="655" width="480" height="135" rx="10" class="runtime" filter="url(#shadow)"/>
+  <text x="1440" y="683" text-anchor="middle" class="bt">Run lifecycle and events</text>
+  <text x="1440" y="706" text-anchor="middle" class="tx">QUEUED -> RUNNING -> terminal state</text>
+  <text x="1440" y="724" text-anchor="middle" class="tx">RUNNING &lt;-&gt; WAITING_FOR_APPROVAL</text>
+  <text x="1440" y="742" text-anchor="middle" class="tx">status transitions emit AgentRunEvent</text>
+  <text x="1440" y="768" text-anchor="middle" class="tiny">SUCCEEDED | FAILED | CANCELLED</text>
+  <path d="M390 722 H450" class="line"/><path d="M750 722 H810" class="amber"/><path d="M1140 722 H1200" class="line"/>
+
+  <rect x="54" y="850" width="1692" height="230" rx="14" class="layer"/>
+  <text x="76" y="879" class="section">4. Capabilities and delegation</text>
+  <rect x="90" y="910" width="320" height="125" rx="10" class="tool" filter="url(#shadow)"/>
+  <text x="250" y="938" text-anchor="middle" class="bt">CRM capabilities</text>
+  <text x="250" y="961" text-anchor="middle" class="tx">query, read records, activities</text>
+  <text x="250" y="979" text-anchor="middle" class="tx">inspect runs, ask questions</text>
+  <text x="250" y="1005" text-anchor="middle" class="tiny">database-backed business actions</text>
+  <rect x="470" y="910" width="320" height="125" rx="10" class="tool" filter="url(#shadow)"/>
+  <text x="630" y="938" text-anchor="middle" class="bt">Workspace capabilities</text>
+  <text x="630" y="961" text-anchor="middle" class="tx">read, glob, grep, write files</text>
+  <text x="630" y="979" text-anchor="middle" class="tx">generated artifacts and reports</text>
+  <text x="630" y="1005" text-anchor="middle" class="tiny">workspace policy boundary</text>
+  <rect x="850" y="910" width="320" height="125" rx="10" class="tool" filter="url(#shadow)"/>
+  <text x="1010" y="938" text-anchor="middle" class="bt">Web and messaging</text>
+  <text x="1010" y="961" text-anchor="middle" class="tx">safe fetch, search, Slack</text>
+  <text x="1010" y="979" text-anchor="middle" class="tx">external side effects are risk-tiered</text>
+  <text x="1010" y="1005" text-anchor="middle" class="tiny">handlers receive ToolContext</text>
+  <rect x="1230" y="910" width="450" height="125" rx="10" class="runtime" filter="url(#shadow)"/>
+  <text x="1455" y="938" text-anchor="middle" class="bt">Subagent delegation</text>
+  <text x="1455" y="961" text-anchor="middle" class="tx">spawn child AgentRun + AgentTask</text>
+  <text x="1455" y="979" text-anchor="middle" class="tx">parent_run_id / child_run_ids</text>
+  <text x="1455" y="1005" text-anchor="middle" class="tiny">recursive depth limit = 3</text>
+  <path d="M600 790 V850 H250 V910" class="line dash"/><path d="M600 790 V850 H630 V910" class="line dash"/><path d="M600 790 V850 H1010 V910" class="line dash"/><path d="M600 790 V850 H1455 V910" class="line dash"/>
+
+  <rect x="90" y="1110" width="1590" height="72" rx="10" fill="#eff6ff" stroke="#93c5fd"/>
+  <text x="885" y="1138" text-anchor="middle" class="bt">Agentic invariant</text>
+  <text x="885" y="1161" text-anchor="middle" class="sm">All model actions become typed tool calls, pass through the canonical registry, and are checkpointed or gated before side effects.</text>
+</svg>

@@ -53,8 +53,9 @@ def create_test_app():
     from app.agent.internal_router import router as internal_agent_router
     from app.agent.agents.root.router import router as root_agent_router
     from app.agent.agents.runner.router import router as runner_agent_router
+    from app.agent.unified_router import router as unified_router
     app = FastAPI(title="Agentic CRM API", version="0.1.0")
-    for router in [agent_router, internal_agent_router, root_agent_router, runner_agent_router]:
+    for router in [agent_router, internal_agent_router, root_agent_router, runner_agent_router, unified_router]:
         app.include_router(router)
     return app
 

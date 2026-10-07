@@ -10,10 +10,12 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 import httpx
+from opentelemetry.trace import StatusCode
 
 from app.config.settings import settings
 from app.database.models import LLMCallLog
 from app.database.session import async_session_factory
+from app.telemetry.otel import get_tracer
 
 
 @dataclass
@@ -122,23 +124,35 @@ class LLMService:
         run_id: Optional[str] = None,
     ) -> LLMResponse:
         provider, resolved_model = self._resolve_provider(model)
-        if provider == "groq":
-            response = await self._call_groq(
-                messages, resolved_model, max_tokens, temperature, tools
-            )
-        else:
-            response = await self._call_ollama(
-                messages, resolved_model, max_tokens, temperature, tools
-            )
-            if response.error and self.groq_api_key:
-                # Ollama unreachable: fall back to GroQ.
+        tracer = get_tracer("llm")
+        with tracer.start_as_current_span("llm.chat") as span:
+            span.set_attribute("llm.provider", provider)
+            span.set_attribute("llm.model", resolved_model)
+            span.set_attribute("llm.tools", len(tools) if tools else 0)
+            span.set_attribute("llm.agent_id", agent_id or "")
+            span.set_attribute("llm.run_id", run_id or "")
+            if provider == "groq":
                 response = await self._call_groq(
-                    messages, self.groq_model, max_tokens, temperature, tools
+                    messages, resolved_model, max_tokens, temperature, tools
                 )
-        await self._log_call(
-            response, messages, agent_id=agent_id, run_id=run_id
-        )
-        return response
+            else:
+                response = await self._call_ollama(
+                    messages, resolved_model, max_tokens, temperature, tools
+                )
+                if response.error and self.groq_api_key:
+                    # Ollama unreachable: fall back to GroQ.
+                    response = await self._call_groq(
+                        messages, self.groq_model, max_tokens, temperature, tools
+                    )
+            span.set_attribute("llm.input_tokens", response.input_tokens)
+            span.set_attribute("llm.output_tokens", response.output_tokens)
+            span.set_attribute("llm.cost_usd", response.cost_usd)
+            if response.error:
+                span.set_status(StatusCode.ERROR, response.error)
+            await self._log_call(
+                response, messages, agent_id=agent_id, run_id=run_id
+            )
+            return response
 
     # -- providers -------------------------------------------------------
 

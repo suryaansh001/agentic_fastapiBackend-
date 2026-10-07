@@ -1,9 +1,14 @@
 import uuid
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from typing import Optional, List
 from app.dependencies.auth import get_current_user, CurrentUser
 from app.agent.langgraph_engine import get_engine
+from app.agent.approval import (
+    APPROVED,
+    ApprovalService,
+    get_approval_service,
+)
 
 router = APIRouter(prefix="/api/agents/unified", tags=["unified-agent"])
 
@@ -66,3 +71,68 @@ async def approve_task(task_id: str, current_user: CurrentUser = Depends(get_cur
     engine = get_engine()
     result = await engine.resume_run(task_id, {"approved": True})
     return result
+
+
+# --- durable human-in-the-loop approvals -----------------------------
+
+
+class ApprovalDecisionRequest(BaseModel):
+    tool_call_id: str
+    decision: str  # "approve" | "deny"
+    idempotency_key: Optional[str] = None
+
+
+class ApprovalDecisionResponse(BaseModel):
+    approval: dict
+    run_result: Optional[dict] = None
+
+
+@router.get("/runs/{run_id}/approvals", response_model=List[dict])
+async def list_approvals(
+    run_id: str,
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    service = get_approval_service()
+    approvals = await service.list_for_run(run_id)
+    return [_approval_dict(a) for a in approvals]
+
+
+@router.post(
+    "/runs/{run_id}/approvals", response_model=ApprovalDecisionResponse
+)
+async def decide_approval(
+    run_id: str,
+    request: ApprovalDecisionRequest,
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    service = get_approval_service()
+    approval = await service.decide(
+        run_id,
+        request.tool_call_id,
+        request.decision,
+        current_user.id,
+        request.idempotency_key,
+    )
+    # Resume the engine with the approver's decision.
+    engine = get_engine()
+    run_result = await engine.resume_run(
+        run_id, {"approved": approval.status == APPROVED}
+    )
+    return ApprovalDecisionResponse(
+        approval=_approval_dict(approval),
+        run_result=run_result,
+    )
+
+
+def _approval_dict(approval) -> dict:
+    return {
+        "id": approval.id,
+        "runId": approval.run_id,
+        "toolCallId": approval.tool_call_id,
+        "tool": approval.tool_name,
+        "args": approval.args or {},
+        "status": approval.status,
+        "approverId": approval.approver_id,
+        "createdAt": approval.created_at.isoformat() if approval.created_at else None,
+        "decidedAt": approval.decided_at.isoformat() if approval.decided_at else None,
+    }

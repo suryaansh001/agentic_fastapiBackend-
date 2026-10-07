@@ -16,7 +16,7 @@ import json
 import uuid
 from typing import Any, Optional
 
-import asyncpg
+from psycopg import AsyncConnection
 from langchain_core.messages import (
     AIMessage,
     HumanMessage,
@@ -43,6 +43,7 @@ from app.agent.run_lifecycle import (
     settle_run,
     transition_run,
 )
+from app.agent.subagents import get_subagent_service
 from app.agent.tools.filesystem import WorkspaceError
 from app.agent.tools.registry import (
     RISK_APPROVAL_REQUIRED,
@@ -65,6 +66,7 @@ class AgentState(TypedDict):
     iteration: int
     files: list
     error: Optional[str]
+    depth: int
 
 
 def _default_system_prompt(registry) -> str:
@@ -136,7 +138,7 @@ class LangGraphEngine(AgentExecutionEngine):
         self.llm_service = llm_service
         self.registry = registry or default_registry()
         self._checkpointer = checkpointer
-        self._checkpointer_conn: Optional[asyncpg.Connection] = None
+        self._checkpointer_conn: Optional[AsyncConnection] = None
         self._graph = None
         self._system_prompt = system_prompt or _default_system_prompt(
             self.registry
@@ -148,8 +150,9 @@ class LangGraphEngine(AgentExecutionEngine):
     async def _get_checkpointer(self) -> AsyncPostgresSaver:
         if self._checkpointer is not None:
             return self._checkpointer
-        self._checkpointer_conn = await asyncpg.connect(
-            _asyncpg_url(settings.DATABASE_URL)
+        self._checkpointer_conn = await AsyncConnection.connect(
+            _asyncpg_url(settings.DATABASE_URL),
+            autocommit=True,
         )
         self._checkpointer = AsyncPostgresSaver(self._checkpointer_conn)
         await self._checkpointer.setup()
@@ -203,7 +206,25 @@ class LangGraphEngine(AgentExecutionEngine):
         async def tools_node(state: AgentState) -> dict:
             last = state["messages"][-1]
             tool_calls = getattr(last, "tool_calls", None) or []
-            ctx = ToolContext(user_id=state.get("user_id") or None)
+            current_depth = state.get("depth") or 0
+
+            async def subagent_executor(
+                parent_run_id, user_id, agent_id, input
+            ):
+                return await self._execute_subagent(
+                    parent_run_id,
+                    user_id,
+                    agent_id,
+                    input,
+                    depth=current_depth + 1,
+                )
+
+            ctx = ToolContext(
+                user_id=state.get("user_id") or None,
+                run_id=state.get("run_id") or None,
+                depth=current_depth,
+                subagent_executor=subagent_executor,
+            )
             # Phase 1: resolve every approval gate before any tool
             # executes. A node's state updates are discarded when it
             # interrupts, so executing tools before an interrupt would
@@ -217,7 +238,7 @@ class LangGraphEngine(AgentExecutionEngine):
                         {
                             "tool_call_id": tool_call["id"],
                             "tool": tool_call["name"],
-                            "args": tool_call["arguments"],
+                            "args": tool_call["args"],
                         }
                     )
             # Phase 2: execute every call exactly once.
@@ -235,7 +256,7 @@ class LangGraphEngine(AgentExecutionEngine):
                     continue
                 try:
                     result = await registry.execute(
-                        tool_call["name"], tool_call["arguments"], ctx
+                        tool_call["name"], tool_call["args"], ctx
                     )
                 except Exception as exc:  # a tool must not kill the run
                     result = {"success": False, "error": str(exc)}
@@ -289,6 +310,7 @@ class LangGraphEngine(AgentExecutionEngine):
         version_id: str,
         input: Optional[dict] = None,
         initiated_by: Optional[str] = None,
+        depth: int = 0,
     ) -> dict:
         graph = await self._get_graph()
         config = {"configurable": {"thread_id": run_id}}
@@ -316,6 +338,7 @@ class LangGraphEngine(AgentExecutionEngine):
                     "iteration": 0,
                     "files": [],
                     "error": None,
+                    "depth": depth,
                 },
                 config,
             )
@@ -340,6 +363,43 @@ class LangGraphEngine(AgentExecutionEngine):
         except Exception as exc:
             error = str(exc)
         return await self._finish(run_id, graph, config, result, error)
+
+    async def _execute_subagent(
+        self,
+        parent_run_id: Optional[str],
+        user_id: Optional[str],
+        agent_id: str,
+        input: Optional[dict],
+        depth: int = 1,
+    ) -> dict:
+        """Spawn and execute a child run of ``agent_id``.
+
+        Called by the ``spawn_subagent`` tool through the
+        per-run executor closure. Creates the durable
+        parent/child records via the SubagentService, then
+        runs the child to completion through this engine.
+        """
+        if not parent_run_id:
+            return {
+                "success": False,
+                "error": "subagent spawn requires a parent run",
+            }
+        async with async_session_factory() as session:
+            child = await get_subagent_service().spawn(
+                session,
+                parent_run_id=parent_run_id,
+                agent_id=agent_id,
+                input=input,
+                initiated_by_id=user_id,
+            )
+        return await self.start_run(
+            child.id,
+            agent_id,
+            child.version_id,
+            input=input,
+            initiated_by=user_id,
+            depth=depth,
+        )
 
     async def cancel_run(self, run_id: str) -> dict:
         async with async_session_factory() as session:
@@ -376,6 +436,19 @@ class LangGraphEngine(AgentExecutionEngine):
                 await transition_run(session, run, to_status)
                 await session.commit()
 
+    async def _record_pending_approval(
+        self, run_id: str, interrupt_value: dict
+    ) -> None:
+        """Persist the gated tool call as a PENDING approval."""
+        from app.agent.approval import get_approval_service
+
+        try:
+            await get_approval_service().record_pending(
+                run_id, interrupt_value
+            )
+        except Exception:
+            pass  # approval recording must not break the run
+
     async def _finish(
         self,
         run_id: str,
@@ -391,6 +464,8 @@ class LangGraphEngine(AgentExecutionEngine):
             # Graph paused at an approval gate.
             paused = True
             pending_tool = _first_interrupt_value(snapshot)
+            if pending_tool is not None:
+                await self._record_pending_approval(run_id, pending_tool)
         async with async_session_factory() as session:
             run = await session.get(AgentRun, run_id)
             if run is not None and run.status not in TERMINAL_STATUSES:

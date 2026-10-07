@@ -1,0 +1,203 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1900" height="1600" viewBox="0 0 1900 1600" role="img" aria-labelledby="title desc">
+  <title id="title">Agentic Prompt Execution Examples</title>
+  <desc id="desc">Prompt-driven examples showing how the CRM agent handles a company email update, a three-month sales report, and a company pitch deck through intent, planning, tools, approval, verification, and response.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="11" markerHeight="11" refX="10" refY="5" orient="auto"><path d="M0,0 L11,5 L0,10 z" fill="#475569"/></marker>
+    <marker id="blue-arrow" markerWidth="11" markerHeight="11" refX="10" refY="5" orient="auto"><path d="M0,0 L11,5 L0,10 z" fill="#2563eb"/></marker>
+    <marker id="green-arrow" markerWidth="11" markerHeight="11" refX="10" refY="5" orient="auto"><path d="M0,0 L11,5 L0,10 z" fill="#15803d"/></marker>
+    <marker id="amber-arrow" markerWidth="11" markerHeight="11" refX="10" y="5" orient="auto"><path d="M0,0 L11,5 L0,10 z" fill="#b45309"/></marker>
+    <filter id="shadow" x="-15%" y="-15%" width="130%" height="140%"><feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#0f172a" flood-opacity="0.12"/></filter>
+    <style>
+      .title { font: 700 34px sans-serif; fill: #0f172a; }
+      .subtitle { font: 400 17px sans-serif; fill: #475569; }
+      .section { font: 700 19px sans-serif; fill: #0f172a; }
+      .bt { font: 700 15px sans-serif; fill: #0f172a; }
+      .tx { font: 400 12px sans-serif; fill: #334155; }
+      .sm { font: 400 12px sans-serif; fill: #475569; }
+      .tiny { font: 400 11px sans-serif; fill: #64748b; }
+      .prompt { fill: #e0f2fe; stroke: #0284c7; stroke-width: 2; }
+      .runtime { fill: #ede9fe; stroke: #7c3aed; stroke-width: 2; }
+      .read { fill: #dcfce7; stroke: #16a34a; stroke-width: 2; }
+      .write { fill: #ffedd5; stroke: #ea580c; stroke-width: 2; }
+      .approval { fill: #fef3c7; stroke: #d97706; stroke-width: 2; }
+      .result { fill: #f1f5f9; stroke: #64748b; stroke-width: 2; }
+      .warning { fill: #fee2e2; stroke: #dc2626; stroke-width: 2; stroke-dasharray: 8 6; }
+      .layer { fill: #f8fafc; stroke: #cbd5e1; stroke-width: 2; }
+      .line { stroke: #475569; stroke-width: 2.2; fill: none; marker-end: url(#arrow); }
+      .blue { stroke: #2563eb; stroke-width: 2.5; fill: none; marker-end: url(#blue-arrow); }
+      .green { stroke: #15803d; stroke-width: 2.2; fill: none; marker-end: url(#green-arrow); }
+      .amber { stroke: #b45309; stroke-width: 2.2; fill: none; marker-end: url(#amber-arrow); }
+      .dash { stroke-dasharray: 8 6; }
+      .number { font: 700 13px sans-serif; fill: #ffffff; }
+    </style>
+  </defs>
+  <rect width="1900" height="1600" fill="#ffffff"/>
+  <text x="54" y="54" class="title">How the Agent Handles Real CRM Prompts</text>
+  <text x="54" y="83" class="subtitle">Prompt -&gt; intent and context -&gt; plan -&gt; risk-aware tools -&gt; verification -&gt; answer or artifact</text>
+
+  <rect x="54" y="106" width="1792" height="44" rx="9" fill="#f8fafc" stroke="#cbd5e1"/>
+  <rect x="75" y="119" width="17" height="17" rx="4" class="prompt"/><text x="100" y="132" class="sm">User prompt</text>
+  <rect x="225" y="119" width="17" height="17" rx="4" class="runtime"/><text x="250" y="132" class="sm">Agent reasoning</text>
+  <rect x="395" y="119" width="17" height="17" rx="4" class="read"/><text x="420" y="132" class="sm">Read-only tool</text>
+  <rect x="560" y="119" width="17" height="17" rx="4" class="write"/><text x="585" y="132" class="sm">Write or artifact</text>
+  <rect x="755" y="119" width="17" height="17" rx="4" class="approval"/><text x="780" y="132" class="sm">Approval gate</text>
+  <rect x="935" y="119" width="17" height="17" rx="4" class="warning"/><text x="960" y="132" class="sm">Capability gap or clarification</text>
+  <text x="1390" y="132" class="tiny">Every step is part of one checkpointed AgentRun</text>
+
+  <rect x="54" y="175" width="1792" height="255" rx="14" class="layer"/>
+  <text x="76" y="204" class="section">Common handling pipeline</text>
+  <g>
+    <circle cx="116" cy="263" r="17" fill="#2563eb"/><text x="116" y="268" text-anchor="middle" class="number">1</text>
+    <rect x="145" y="225" width="205" height="78" rx="10" class="prompt" filter="url(#shadow)"/>
+    <text x="247" y="250" text-anchor="middle" class="bt">Receive prompt</text>
+    <text x="247" y="272" text-anchor="middle" class="tx">Create a durable run</text>
+    <text x="247" y="289" text-anchor="middle" class="tx">Keep user and thread context</text>
+  </g>
+  <g>
+    <circle cx="406" cy="263" r="17" fill="#7c3aed"/><text x="406" y="268" text-anchor="middle" class="number">2</text>
+    <rect x="435" y="225" width="205" height="78" rx="10" class="runtime" filter="url(#shadow)"/>
+    <text x="537" y="250" text-anchor="middle" class="bt">Understand intent</text>
+    <text x="537" y="272" text-anchor="middle" class="tx">Entities, dates, output type</text>
+    <text x="537" y="289" text-anchor="middle" class="tx">Ask when ambiguous</text>
+  </g>
+  <g>
+    <circle cx="696" cy="263" r="17" fill="#7c3aed"/><text x="696" y="268" text-anchor="middle" class="number">3</text>
+    <rect x="725" y="225" width="205" height="78" rx="10" class="runtime" filter="url(#shadow)"/>
+    <text x="827" y="250" text-anchor="middle" class="bt">Plan steps</text>
+    <text x="827" y="272" text-anchor="middle" class="tx">Choose CRM, web, file tools</text>
+    <text x="827" y="289" text-anchor="middle" class="tx">Respect scope and limits</text>
+  </g>
+  <g>
+    <circle cx="986" cy="263" r="17" fill="#ea580c"/><text x="986" y="268" text-anchor="middle" class="number">4</text>
+    <rect x="1015" y="225" width="205" height="78" rx="10" class="write" filter="url(#shadow)"/>
+    <text x="1117" y="250" text-anchor="middle" class="bt">Apply tool policy</text>
+    <text x="1117" y="272" text-anchor="middle" class="tx">Safe, approval, or blocked</text>
+    <text x="1117" y="289" text-anchor="middle" class="tx">Gate before side effects</text>
+  </g>
+  <g>
+    <circle cx="1276" cy="263" r="17" fill="#15803d"/><text x="1276" y="268" text-anchor="middle" class="number">5</text>
+    <rect x="1305" y="225" width="205" height="78" rx="10" class="read" filter="url(#shadow)"/>
+    <text x="1407" y="250" text-anchor="middle" class="bt">Execute and observe</text>
+    <text x="1407" y="272" text-anchor="middle" class="tx">Tool results become messages</text>
+    <text x="1407" y="289" text-anchor="middle" class="tx">Events and traces are emitted</text>
+  </g>
+  <g>
+    <circle cx="1566" cy="263" r="17" fill="#475569"/><text x="1566" y="268" text-anchor="middle" class="number">6</text>
+    <rect x="1595" y="225" width="205" height="78" rx="10" class="result" filter="url(#shadow)"/>
+    <text x="1697" y="250" text-anchor="middle" class="bt">Verify and respond</text>
+    <text x="1697" y="272" text-anchor="middle" class="tx">Confirm result and summarize</text>
+    <text x="1697" y="289" text-anchor="middle" class="tx">Return files when generated</text>
+  </g>
+  <path d="M350 264 H435" class="blue"/><path d="M640 264 H725" class="blue"/><path d="M930 264 H1015" class="blue"/><path d="M1220 264 H1305" class="blue"/><path d="M1510 264 H1595" class="blue"/>
+  <path d="M1117 303 V345 H827 V303" class="amber dash"/>
+  <text x="970" y="366" text-anchor="middle" class="tiny">Approval or clarification pauses the run and resumes from its checkpoint</text>
+
+  <rect x="54" y="460" width="1792" height="330" rx="14" class="layer"/>
+  <text x="76" y="489" class="section">Example 1: update a company email</text>
+  <rect x="80" y="515" width="320" height="105" rx="10" class="prompt" filter="url(#shadow)"/>
+  <text x="100" y="541" class="bt">Prompt</text>
+  <text x="100" y="566" class="tx">"Update Acme's details with</text>
+  <text x="100" y="584" class="tx">their updated email ID: sales@acme.com"</text>
+  <text x="100" y="603" class="tiny">Intent: mutate CRM company data</text>
+
+  <rect x="440" y="515" width="285" height="105" rx="10" class="runtime" filter="url(#shadow)"/>
+  <text x="582" y="541" text-anchor="middle" class="bt">Resolve and inspect</text>
+  <text x="582" y="566" text-anchor="middle" class="tx">query_crm(search_companies)</text>
+  <text x="582" y="584" text-anchor="middle" class="tx">read_crm_record / verify match</text>
+  <text x="582" y="603" text-anchor="middle" class="tiny">Confirm exact company before write</text>
+
+  <rect x="765" y="515" width="300" height="105" rx="10" class="warning" filter="url(#shadow)"/>
+  <text x="915" y="541" text-anchor="middle" class="bt">Current capability check</text>
+  <text x="915" y="566" text-anchor="middle" class="tx">Canonical registry has read tools,</text>
+  <text x="915" y="584" text-anchor="middle" class="tx">but no generic CRM update tool</text>
+  <text x="915" y="603" text-anchor="middle" class="tiny">Do not pretend the write happened</text>
+
+  <rect x="1105" y="515" width="300" height="105" rx="10" class="approval" filter="url(#shadow)"/>
+  <text x="1255" y="541" text-anchor="middle" class="bt">Safe next step</text>
+  <text x="1255" y="566" text-anchor="middle" class="tx">Ask for confirmation if ambiguous,</text>
+  <text x="1255" y="584" text-anchor="middle" class="tx">then use approved mutation path</text>
+  <text x="1255" y="603" text-anchor="middle" class="tiny">Approval required for side effect</text>
+
+  <rect x="1445" y="515" width="350" height="105" rx="10" class="result" filter="url(#shadow)"/>
+  <text x="1620" y="541" text-anchor="middle" class="bt">Response</text>
+  <text x="1620" y="566" text-anchor="middle" class="tx">Current system: report the missing</text>
+  <text x="1620" y="584" text-anchor="middle" class="tx">capability or route to direct CRM service</text>
+  <text x="1620" y="603" text-anchor="middle" class="tiny">After implementation: verify old/new value</text>
+  <path d="M400 568 H440" class="blue"/><path d="M725 568 H765" class="blue"/><path d="M1065 568 H1105" class="amber"/><path d="M1405 568 H1445" class="line"/>
+  <rect x="80" y="650" width="1715" height="96" rx="10" fill="#fff7ed" stroke="#fdba74"/>
+  <text x="100" y="679" class="bt">Important behavior</text>
+  <text x="100" y="703" class="tx">A write request is never silently converted into a read-only success. The agent must resolve the record, enforce authorization, pass the mutation through a registered approval-aware tool, and re-read the record to verify the update.</text>
+  <text x="100" y="725" class="tiny">Existing direct root-agent CRM endpoints include field mutation behavior, but they are separate from the canonical ToolRegistry path.</text>
+
+  <rect x="54" y="820" width="1792" height="280" rx="14" class="layer"/>
+  <text x="76" y="849" class="section">Example 2: create a sales report for the past three months</text>
+  <rect x="80" y="875" width="320" height="105" rx="10" class="prompt" filter="url(#shadow)"/>
+  <text x="100" y="901" class="bt">Prompt</text>
+  <text x="100" y="926" class="tx">"Create a sales report for</text>
+  <text x="100" y="944" class="tx">the past three months"</text>
+  <text x="100" y="963" class="tiny">Intent: analyze CRM data and produce file</text>
+
+  <rect x="440" y="875" width="285" height="105" rx="10" class="runtime" filter="url(#shadow)"/>
+  <text x="582" y="901" text-anchor="middle" class="bt">Define time window</text>
+  <text x="582" y="926" text-anchor="middle" class="tx">Resolve current date and timezone</text>
+  <text x="582" y="944" text-anchor="middle" class="tx">Set start/end dates explicitly</text>
+  <text x="582" y="963" text-anchor="middle" class="tiny">Clarify fiscal vs calendar if needed</text>
+
+  <rect x="765" y="875" width="300" height="105" rx="10" class="read" filter="url(#shadow)"/>
+  <text x="915" y="901" text-anchor="middle" class="bt">Query CRM</text>
+  <text x="915" y="926" text-anchor="middle" class="tx">query_crm(deal_pipeline)</text>
+  <text x="915" y="944" text-anchor="middle" class="tx">query_crm(deal_summary)</text>
+  <text x="915" y="963" text-anchor="middle" class="tiny">Read-only queries can run automatically</text>
+
+  <rect x="1105" y="875" width="300" height="105" rx="10" class="write" filter="url(#shadow)"/>
+  <text x="1255" y="901" text-anchor="middle" class="bt">Build report artifact</text>
+  <text x="1255" y="926" text-anchor="middle" class="tx">Aggregate totals and trends</text>
+  <text x="1255" y="944" text-anchor="middle" class="tx">write_file(sales-report.md/csv)</text>
+  <text x="1255" y="963" text-anchor="middle" class="tiny">File write pauses for approval</text>
+
+  <rect x="1445" y="875" width="350" height="105" rx="10" class="result" filter="url(#shadow)"/>
+  <text x="1620" y="901" text-anchor="middle" class="bt">Verify and return</text>
+  <text x="1620" y="926" text-anchor="middle" class="tx">Check totals against query results</text>
+  <text x="1620" y="944" text-anchor="middle" class="tx">Return summary, date range, file link</text>
+  <text x="1620" y="963" text-anchor="middle" class="tiny">Never invent missing CRM values</text>
+  <path d="M400 928 H440" class="blue"/><path d="M725 928 H765" class="blue"/><path d="M1065 928 H1105" class="green"/><path d="M1405 928 H1445" class="line"/>
+
+  <rect x="54" y="1130" width="1792" height="280" rx="14" class="layer"/>
+  <text x="76" y="1159" class="section">Example 3: create a company pitch deck from the past three months</text>
+  <rect x="80" y="1185" width="320" height="105" rx="10" class="prompt" filter="url(#shadow)"/>
+  <text x="100" y="1211" class="bt">Prompt</text>
+  <text x="100" y="1236" class="tx">"Create a pitch deck for Acme</text>
+  <text x="100" y="1254" class="tx">using activity from the past three months"</text>
+  <text x="100" y="1273" class="tiny">Intent: CRM research + external context + file</text>
+
+  <rect x="440" y="1185" width="285" height="105" rx="10" class="runtime" filter="url(#shadow)"/>
+  <text x="582" y="1211" text-anchor="middle" class="bt">Plan research</text>
+  <text x="582" y="1236" text-anchor="middle" class="tx">Resolve Acme and date range</text>
+  <text x="582" y="1254" text-anchor="middle" class="tx">Choose CRM plus web context</text>
+  <text x="582" y="1273" text-anchor="middle" class="tiny">Optional subagent for research</text>
+
+  <rect x="765" y="1185" width="300" height="105" rx="10" class="read" filter="url(#shadow)"/>
+  <text x="915" y="1211" text-anchor="middle" class="bt">Gather evidence</text>
+  <text x="915" y="1236" text-anchor="middle" class="tx">query_crm(company_contacts/timeline)</text>
+  <text x="915" y="1254" text-anchor="middle" class="tx">web_search / web_fetch if allowed</text>
+  <text x="915" y="1273" text-anchor="middle" class="tiny">Attach sources and dates to findings</text>
+
+  <rect x="1105" y="1185" width="300" height="105" rx="10" class="write" filter="url(#shadow)"/>
+  <text x="1255" y="1211" text-anchor="middle" class="bt">Generate deck content</text>
+  <text x="1255" y="1236" text-anchor="middle" class="tx">Draft narrative and slides</text>
+  <text x="1255" y="1254" text-anchor="middle" class="tx">write_file(pitch-deck.md or source)</text>
+  <text x="1255" y="1273" text-anchor="middle" class="tiny">Approval required before writing</text>
+
+  <rect x="1445" y="1185" width="350" height="105" rx="10" class="result" filter="url(#shadow)"/>
+  <text x="1620" y="1211" text-anchor="middle" class="bt">Verify and deliver</text>
+  <text x="1620" y="1236" text-anchor="middle" class="tx">Check claims, sources, and time range</text>
+  <text x="1620" y="1254" text-anchor="middle" class="tx">Return deck artifact and assumptions</text>
+  <text x="1620" y="1273" text-anchor="middle" class="tiny">Missing facts become explicit gaps</text>
+  <path d="M400 1238 H440" class="blue"/><path d="M725 1238 H765" class="blue"/><path d="M1065 1238 H1105" class="green"/><path d="M1405 1238 H1445" class="line"/>
+
+  <rect x="54" y="1440" width="1792" height="112" rx="12" fill="#eff6ff" stroke="#93c5fd"/>
+  <text x="950" y="1470" text-anchor="middle" class="bt">Agentic contract</text>
+  <text x="950" y="1494" text-anchor="middle" class="sm">The agent reasons over the request, but every real action is a typed tool call.</text>
+  <text x="950" y="1515" text-anchor="middle" class="sm">Read-only work can proceed automatically; writes, messages, and generated files are risk-gated and checkpointed.</text>
+  <text x="950" y="1536" text-anchor="middle" class="tiny">If a required capability is not registered, the correct outcome is a clarification or explicit limitation, not a fabricated success.</text>
+</svg>

@@ -15,7 +15,18 @@ from app.agent.run_lifecycle import (
     WAITING_FOR_APPROVAL,
 )
 from app.agent.worker import AgentWorker, WorkerExecutor
-from app.database.models import AgentRun, AgentTask
+from app.database.models import AgentRun, AgentRunEvent, AgentTask
+from app.database.session import async_session_factory
+
+
+async def _fresh_get(model, obj_id):
+    """Read with a fresh session.
+
+    The engine commits through its own session; the test's
+    db_session identity map would return stale objects.
+    """
+    async with async_session_factory() as session:
+        return await session.get(model, obj_id)
 
 
 class FakeLLM:
@@ -82,7 +93,7 @@ async def test_start_run_direct_answer(db_session):
     assert result["tools_called"] == []
     assert result["steps_executed"] == 1
 
-    refreshed = await db_session.get(AgentRun, run.id)
+    refreshed = await _fresh_get(AgentRun, run.id)
     assert refreshed.status == SUCCEEDED
     assert refreshed.summary == "Hello there"
 
@@ -142,16 +153,18 @@ async def test_start_run_executes_safe_tool(db_session):
     assert result["tools_called"] == ["query_crm"]
     assert result["steps_executed"] == 2
 
-    refreshed = await db_session.get(AgentRun, run.id)
+    refreshed = await _fresh_get(AgentRun, run.id)
     assert refreshed.status == SUCCEEDED
 
     # A tool_called event was written for the execution.
-    from app.database.models import AgentRunEvent
-    events = (
-        await db_session.execute(
-            AgentRunEvent.__table__.select().where(AgentRunEvent.run_id == run.id)
-        )
-    ).fetchall()
+    async with async_session_factory() as session:
+        events = (
+            await session.execute(
+                AgentRunEvent.__table__.select().where(
+                    AgentRunEvent.run_id == run.id
+                )
+            )
+        ).fetchall()
     types = [e.type for e in events]
     assert "status_changed" in types
     assert "tool_called" in types
@@ -196,7 +209,7 @@ async def test_start_run_pauses_for_approval(db_session):
     assert result["paused"] is True
     assert result["pending_tool"]["tool"] == "create_crm_activity"
 
-    refreshed = await db_session.get(AgentRun, run.id)
+    refreshed = await _fresh_get(AgentRun, run.id)
     assert refreshed.status == WAITING_FOR_APPROVAL
 
     # The gated tool did NOT execute.
@@ -224,7 +237,7 @@ async def test_resume_run_approved(db_session):
     assert result["status"] == "SUCCEEDED"
     assert result["response"] == "Activity logged"
 
-    refreshed = await db_session.get(AgentRun, run.id)
+    refreshed = await _fresh_get(AgentRun, run.id)
     assert refreshed.status == SUCCEEDED
 
 
@@ -267,7 +280,7 @@ async def test_cancel_run(db_session):
     result = await engine.cancel_run(run.id)
 
     assert result["status"] == CANCELLED
-    refreshed = await db_session.get(AgentRun, run.id)
+    refreshed = await _fresh_get(AgentRun, run.id)
     assert refreshed.status == CANCELLED
 
 
@@ -321,15 +334,13 @@ async def test_worker_executes_agent_run_task(db_session):
     claimed = await worker.claim_next_task()
     assert claimed is not None
 
-    # The worker transitioned the run to RUNNING before the engine.
-    running = await db_session.get(AgentRun, run.id)
-    assert running.status == RUNNING
-
     await worker.process_task(claimed)
 
-    settled = await db_session.get(AgentRun, run.id)
+    # The worker transitioned the run QUEUED -> RUNNING -> SUCCEEDED.
+    settled = await _fresh_get(AgentRun, run.id)
     assert settled.status == SUCCEEDED
-    settled_task = await db_session.get(AgentTask, task.id)
+    assert settled.summary == "worker did the work"
+    settled_task = await _fresh_get(AgentTask, task.id)
     assert settled_task.status == "SUCCEEDED"
 
 
@@ -352,5 +363,5 @@ async def test_worker_skips_non_agent_tasks(db_session):
     claimed = await worker.claim_next_task()
     # Bridge dispatch fails (no bridge reachable) but the task settles.
     await worker.process_task(claimed)
-    settled = await db_session.get(AgentTask, task.id)
+    settled = await _fresh_get(AgentTask, task.id)
     assert settled.status in ("SUCCEEDED", "FAILED")

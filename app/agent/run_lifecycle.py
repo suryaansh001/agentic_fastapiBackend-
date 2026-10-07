@@ -9,10 +9,12 @@ import uuid
 from datetime import datetime
 from typing import Optional
 
+from opentelemetry.trace import StatusCode
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.models import AgentRun, AgentRunEvent, AgentRunStatus
+from app.telemetry.otel import get_tracer
 
 QUEUED = AgentRunStatus.QUEUED.value
 RUNNING = AgentRunStatus.RUNNING.value
@@ -77,25 +79,34 @@ async def transition_run(
     error_message: Optional[str] = None,
 ) -> AgentRun:
     """Move a run to a new status, recording a status_changed event."""
-    if not can_transition(run.status, new_status):
-        raise InvalidTransition(run.status, new_status)
-    previous = run.status
-    run.status = new_status
-    if new_status == RUNNING and run.started_at is None:
-        run.started_at = datetime.utcnow()
-    if new_status in TERMINAL_STATUSES:
-        run.finished_at = datetime.utcnow()
-        if error_code:
-            run.error_code = error_code
-        if error_message:
-            run.error_message = error_message
-    await emit_event(
-        session,
-        run.id,
-        "status_changed",
-        {"from": previous, "to": new_status},
-    )
-    return run
+    tracer = get_tracer("run")
+    with tracer.start_as_current_span("run.transition") as span:
+        span.set_attribute("run.id", run.id)
+        span.set_attribute("run.from", run.status)
+        span.set_attribute("run.to", new_status)
+        if not can_transition(run.status, new_status):
+            span.set_status(
+                StatusCode.ERROR,
+                f"invalid transition {run.status} -> {new_status}",
+            )
+            raise InvalidTransition(run.status, new_status)
+        previous = run.status
+        run.status = new_status
+        if new_status == RUNNING and run.started_at is None:
+            run.started_at = datetime.utcnow()
+        if new_status in TERMINAL_STATUSES:
+            run.finished_at = datetime.utcnow()
+            if error_code:
+                run.error_code = error_code
+            if error_message:
+                run.error_message = error_message
+        await emit_event(
+            session,
+            run.id,
+            "status_changed",
+            {"from": previous, "to": new_status},
+        )
+        return run
 
 
 async def settle_run(

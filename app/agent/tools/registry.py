@@ -14,6 +14,7 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from typing import Any, AsyncGenerator, Awaitable, Callable, Optional
 
+from opentelemetry.trace import StatusCode
 from pydantic import BaseModel, Field
 
 from app.agent.tools.crm_query import CrmQueryError, crm_query_service
@@ -25,11 +26,16 @@ from app.agent.tools.filesystem import (
     write_text_file,
 )
 from app.agent.tools.web_fetch import WebFetchError, safe_fetch
+from app.telemetry.otel import get_tracer
 
 # Risk tiers. The execution engine (Phase 5 HITL) gates tools on these.
 RISK_SAFE = "safe"
 RISK_APPROVAL_REQUIRED = "approval_required"
 RISK_BLOCKED = "blocked"
+
+# Maximum subagent nesting depth. A top-level run has
+# depth 0; it may spawn children up to this depth.
+MAX_SUBAGENT_DEPTH = 3
 
 
 # --- input schemas (canonical definitions) ----------------------------------
@@ -102,6 +108,14 @@ class WriteFileInput(BaseModel):
     content: str
 
 
+class SpawnSubagentInput(BaseModel):
+    agentId: str = Field(..., description="Id of the agent to spawn")
+    input: Optional[dict] = Field(
+        default_factory=dict,
+        description="Input for the subagent run",
+    )
+
+
 # --- execution context ------------------------------------------------------
 
 
@@ -112,6 +126,11 @@ class ToolContext:
     user_id: Optional[str] = None
     workspace_root: Optional[str] = None
     session: Optional[Any] = None  # AsyncSession, when the engine provides one
+    run_id: Optional[str] = None  # current AgentRun.id
+    depth: int = 0  # subagent nesting depth (0 = top-level run)
+    # Engine-supplied callable to execute a subagent:
+    # async (parent_run_id, user_id, agent_id, input) -> dict
+    subagent_executor: Optional[Callable] = None
 
 
 @asynccontextmanager
@@ -176,16 +195,23 @@ class ToolRegistry:
         args: Optional[dict] = None,
         context: Optional[ToolContext] = None,
     ) -> dict:
-        spec = self.get(name)
-        if spec is None:
-            return {"success": False, "error": f"unknown tool: {name}"}
-        if spec.handler is None:
-            return {"success": False, "error": f"tool {name} has no handler"}
-        ctx = context or ToolContext()
-        result = spec.handler(ctx, args or {})
-        if inspect.isawaitable(result):
-            result = await result
-        return result
+        tracer = get_tracer("tool")
+        with tracer.start_as_current_span("tool.execute") as span:
+            span.set_attribute("tool.name", name)
+            spec = self.get(name)
+            if spec is None:
+                span.set_status(StatusCode.ERROR, f"unknown tool: {name}")
+                return {"success": False, "error": f"unknown tool: {name}"}
+            if spec.handler is None:
+                span.set_status(StatusCode.ERROR, "no handler")
+                return {"success": False, "error": f"tool {name} has no handler"}
+            span.set_attribute("tool.risk", spec.risk)
+            ctx = context or ToolContext()
+            result = spec.handler(ctx, args or {})
+            if inspect.isawaitable(result):
+                result = await result
+            span.set_attribute("tool.success", bool(result.get("success", True)))
+            return result
 
 
 # --- handlers ---------------------------------------------------------------
@@ -194,6 +220,27 @@ class ToolRegistry:
 async def _ask_question(ctx: ToolContext, args: dict) -> dict:
     data = AskQuestionInput(**args)
     return {"question": data.question, "options": data.options or []}
+
+
+async def _spawn_subagent(ctx: ToolContext, args: dict) -> dict:
+    data = SpawnSubagentInput(**args)
+    if ctx.subagent_executor is None:
+        return {
+            "success": False,
+            "error": "subagents are not available in this context",
+        }
+    if ctx.depth >= MAX_SUBAGENT_DEPTH:
+        return {
+            "success": False,
+            "error": (
+                f"maximum subagent depth "
+                f"({MAX_SUBAGENT_DEPTH}) exceeded"
+            ),
+        }
+    result = await ctx.subagent_executor(
+        ctx.run_id, ctx.user_id, data.agentId, data.input
+    )
+    return {"success": True, **result}
 
 
 async def _query_crm(ctx: ToolContext, args: dict) -> dict:
@@ -308,7 +355,7 @@ def _build_default_registry() -> ToolRegistry:
             name="query_crm",
             description=(
                 "Run an allow-listed, read-only CRM query. Supported "
-                "operations: list_deals, search_contacts, search_companies, "
+                "operations: list_companies, list_deals, search_contacts, search_companies, "
                 "deal_pipeline, contact_timeline, company_contacts, deal_summary."
             ),
             parameters=_schema(QueryCRMInput),
@@ -379,6 +426,19 @@ def _build_default_registry() -> ToolRegistry:
             description="Read a text file from the agent workspace.",
             parameters=_schema(ReadFileInput),
             handler=_read_file,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="spawn_subagent",
+            description=(
+                "Spawn a subagent (a child run of another "
+                "LIVE agent) and return its result. The "
+                "subagent runs to completion before this "
+                "run continues."
+            ),
+            parameters=_schema(SpawnSubagentInput),
+            handler=_spawn_subagent,
         )
     )
     registry.register(

@@ -3,34 +3,69 @@
 This directory contains the FastAPI implementation of the CRM agent APIs. It owns
 CRM data, task records, dispatch integration, and a lightweight agent runtime.
 
-## Architecture Image
+## Architecture Images
 
-Open the standalone [SVG architecture diagram](fastapi-agent-architecture.svg).
-It uses blue for implemented components, red dashed boxes for missing or incomplete
-FastAPI behavior.
+Use the two focused diagrams for the current architecture:
 
-![FastAPI agentic backend architecture](fastapi-agent-architecture.svg)
+### Agentic layer only
+
+[Open the agentic-only architecture diagram](agentic-only-architecture.svg).
+It covers durable runs, LangGraph reasoning, native tool calling, approval gates,
+canonical tools, subagent delegation, checkpoints, and LLM providers.
+
+![Agentic layer only](agentic-only-architecture.svg)
+
+### Backend only
+
+[Open the backend-only architecture diagram](backend-only-architecture.svg).
+It covers FastAPI startup, middleware and authentication, CRM domain modules,
+database persistence, dispatch infrastructure, integrations, and observability.
+
+![Backend only](backend-only-architecture.svg)
+
+### Prompt execution examples
+
+[Open the prompt execution examples diagram](agentic-prompt-execution-examples.svg).
+It traces a company-email update, a three-month sales report, and a company pitch
+deck from user prompt through intent detection, planning, tool policy, approval,
+verification, and the final response or artifact. It also marks the current
+canonical-registry limitation for generic CRM field updates.
+
+![Prompt execution examples](agentic-prompt-execution-examples.svg)
+
+The earlier combined diagram remains available as
+[agentic-layer-architecture.svg](agentic-layer-architecture.svg).
+
+For the complete written layer descriptions, see:
+
+- [Backend layer](backend.md)
+- [Agentic layer](agentic.md)
 
 ## Current Architecture
 
-The unified FastAPI flow is:
+The canonical durable FastAPI flow is:
 
 ```text
-HTTP request
-  -> keyword router
-  -> one fixed agent family
-  -> LLM call with tool descriptions
-  -> JSON tool-call parsing
-  -> Python tool execution
-  -> tool result added to state
-  -> repeat until final answer or limit
+HTTP request or domain trigger
+   -> AgentTask queue
+   -> AgentWorker / WorkerExecutor
+   -> AgentRun lifecycle
+   -> LangGraph checkpointed state
+   -> LLMService native tool calling
+   -> approval gate or ToolRegistry execution
+   -> tool result added to graph state
+   -> repeat until final answer, limit, or terminal failure
 ```
 
 ## Visual Architecture
 
-The diagrams below describe the FastAPI backend as it exists today. Solid blue
-components are implemented. Dashed red components are planned, incomplete, or
-currently represented only by database models and stubs.
+The standalone image above is the source of truth for the updated agentic layer.
+Solid components represent the current durable path. Dashed red components mark
+legacy or incomplete paths that remain in the codebase for compatibility.
+
+The detailed Mermaid sections below are retained as historical design notes and
+may describe the pre-LangGraph orchestrator; use the standalone SVG for the
+current architecture.
 
 ### 1. Unified Agent Request Flow
 

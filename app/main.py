@@ -1,18 +1,18 @@
 from fastapi import FastAPI
-from app.config.settings import settings
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from app.database.session import engine, Base
 from contextlib import asynccontextmanager
-from sqlalchemy import create_engine as sync_engine
 from app.dependencies import setup_dependencies
 from app.middlewares import setup_middlewares
+from app.telemetry.otel import init_telemetry
 from app.trpc.context import setup_trpc
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    sync = sync_engine(settings.DATABASE_URL.replace("sqlite+aiosqlite", "sqlite"), echo=False)
-    Base.metadata.create_all(sync)
+    init_telemetry()
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.create_all)
     yield
-    sync.dispose()
     await engine.dispose()
 
 def setup_app(app: FastAPI) -> None:
@@ -87,6 +87,7 @@ def setup_app(app: FastAPI) -> None:
     app.include_router(llm_router)
 
 def create_app() -> FastAPI:
+    init_telemetry()
     app = FastAPI(
         title="Agentic CRM API",
         description="CRM API with optional agentic intelligence",
@@ -94,6 +95,7 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
     setup_app(app)
+    FastAPIInstrumentor.instrument_app(app)
     return app
 
 app = create_app()
