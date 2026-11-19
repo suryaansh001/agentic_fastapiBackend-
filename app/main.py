@@ -52,6 +52,7 @@ def setup_app(app: FastAPI) -> None:
     from app.agent.agents.runner.router import router as runner_agent_router
     from app.agent.unified_router import router as unified_agent_router
     from app.agent.llm_router import router as llm_router
+    from app.agent.laya_router import router as laya_router
 
     app.include_router(auth_router, prefix="/api/auth")
     app.include_router(companies_router, prefix="/api/companies")
@@ -85,6 +86,7 @@ def setup_app(app: FastAPI) -> None:
     app.include_router(runner_agent_router)
     app.include_router(unified_agent_router)
     app.include_router(llm_router)
+    app.include_router(laya_router)
 
 def create_app() -> FastAPI:
     init_telemetry()

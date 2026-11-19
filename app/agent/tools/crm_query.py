@@ -10,7 +10,15 @@ from typing import Any, Dict, List, Optional
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.database.models import Activity, Company, Contact, Deal
+from app.database.models import (
+    Activity,
+    ActivityType,
+    Company,
+    Contact,
+    Deal,
+    LeadStatus,
+    LifecycleStage,
+)
 
 MAX_ROWS = 100
 
@@ -121,6 +129,67 @@ class CrmQueryService:
         rows = await _rows(session, stmt)
         return {"operation": "search_companies", "count": len(rows), "rows": [[_serialize(v) for v in r.values()] for r in rows], "columns": list(rows[0].keys()) if rows else []}
 
+    async def list_leads(
+        self,
+        session: AsyncSession,
+        lifecycle_stage: Optional[str] = None,
+        lead_status: Optional[str] = None,
+        limit: Any = 25,
+    ) -> Dict[str, Any]:
+        lead_stages = [
+            LifecycleStage.LEAD,
+            LifecycleStage.MARKETING_QUALIFIED_LEAD,
+            LifecycleStage.SALES_QUALIFIED_LEAD,
+        ]
+        stmt = select(
+            Company.id,
+            Company.name,
+            Company.domain,
+            Company.industry,
+            Company.city,
+            Company.country,
+            Company.lifecycle_stage,
+            Company.lead_status,
+            Company.custom_fields,
+        ).where(Company.lifecycle_stage.in_(lead_stages))
+        if lifecycle_stage:
+            stmt = stmt.where(Company.lifecycle_stage == lifecycle_stage)
+        if lead_status:
+            stmt = stmt.where(Company.lead_status == lead_status)
+        stmt = stmt.limit(_limit(limit)).order_by(Company.created_at.desc())
+        rows = await _rows(session, stmt)
+        return {"operation": "list_leads", "count": len(rows), "rows": [[_serialize(v) for v in r.values()] for r in rows], "columns": list(rows[0].keys()) if rows else []}
+
+    async def list_emails(
+        self,
+        session: AsyncSession,
+        company_id: Optional[str] = None,
+        contact_id: Optional[str] = None,
+        limit: Any = 25,
+    ) -> Dict[str, Any]:
+        stmt = (
+            select(
+                Activity.id,
+                Activity.subject,
+                Activity.body,
+                Activity.occurred_at,
+                Activity.company_id,
+                Activity.contact_id,
+                Company.name.label("company_name"),
+                Contact.email.label("contact_email"),
+            )
+            .join(Company, Company.id == Activity.company_id, isouter=True)
+            .join(Contact, Contact.id == Activity.contact_id, isouter=True)
+            .where(Activity.type == ActivityType.EMAIL)
+        )
+        if company_id:
+            stmt = stmt.where(Activity.company_id == company_id)
+        if contact_id:
+            stmt = stmt.where(Activity.contact_id == contact_id)
+        stmt = stmt.limit(_limit(limit)).order_by(Activity.occurred_at.desc())
+        rows = await _rows(session, stmt)
+        return {"operation": "list_emails", "count": len(rows), "rows": [[_serialize(v) for v in r.values()] for r in rows], "columns": list(rows[0].keys()) if rows else []}
+
     async def deal_pipeline(
         self,
         session: AsyncSession,
@@ -183,6 +252,11 @@ class CrmQueryService:
     # Operation registry: name -> (handler, required params, optional params)
     OPERATIONS = {
         "list_companies": (list_companies, [], ["limit"]),
+        "list_leads": (
+            list_leads,
+            [],
+            ["lifecycle_stage", "lead_status", "limit"],
+        ),
         "list_deals": (list_deals, [], ["stage", "owner_id", "company_id", "limit"]),
         "search_contacts": (search_contacts, [], ["query", "limit"]),
         "search_companies": (search_companies, [], ["query", "limit"]),
@@ -190,6 +264,11 @@ class CrmQueryService:
         "contact_timeline": (contact_timeline, ["contact_id"], ["limit"]),
         "company_contacts": (company_contacts, ["company_id"], ["limit"]),
         "deal_summary": (deal_summary, ["deal_id"], []),
+        "list_emails": (
+            list_emails,
+            [],
+            ["company_id", "contact_id", "limit"],
+        ),
     }
 
     async def execute(self, session: AsyncSession, operation: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:

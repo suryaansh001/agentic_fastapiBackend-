@@ -35,5 +35,10 @@ def get_file(file_path: str, current_user: CurrentUser = Depends(get_current_use
     if not full_path:
         raise HTTPException(status_code=404, detail="File not found")
     ext = os.path.splitext(file_path)[1].lower()
-    media_type = "application/pdf" if ext == ".pdf" else ("image/svg+xml" if ext == ".svg" else "image/png")
+    media_type = (
+        "application/pdf" if ext == ".pdf"
+        else "image/svg+xml" if ext == ".svg"
+        else "text/html" if ext in (".html", ".htm")
+        else "image/png"
+    )
     return FileResponse(full_path, media_type=media_type, filename=os.path.basename(file_path))

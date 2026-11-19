@@ -29,6 +29,15 @@ class Settings(BaseSettings):
     OLLAMA_MODEL: str = Field("llama3.1", env="OLLAMA_MODEL")
     GROQ_API_KEY: Optional[str] = Field(None, env="GROQ_API_KEY")
     GROQ_MODEL: str = Field("llama-3.1-70b-versatile", env="GROQ_MODEL")
+    LAYA_API_KEY: Optional[str] = Field(None, env="LAYA_API_KEY")
+    LAYA_MODEL: Optional[str] = Field(None, env="LAYA_MODEL")
+    LAYA_API_URL: str = Field(
+        "https://api.laya.studio/v1/systemone",
+        env="LAYA_API_URL",
+    )
+    LAYA_TIMEOUT_SECONDS: float = Field(30.0, env="LAYA_TIMEOUT_SECONDS")
+    LAYA_FALLBACK: str = Field("llm", env="LAYA_FALLBACK")
+    LAYA_MIN_CONFIDENCE: float = Field(0.75, env="LAYA_MIN_CONFIDENCE")
     REPORTING_CURRENCY: str = Field("USD", env="REPORTING_CURRENCY")
     ARCHIVE_RETENTION_DAYS: int = Field(180, env="ARCHIVE_RETENTION_DAYS")
     CACHE_TTL_MS: int = Field(60000, env="CACHE_TTL_MS")
@@ -40,9 +49,16 @@ class Settings(BaseSettings):
     AGENT_MAX_TOOL_SECONDS: int = Field(60, env="AGENT_MAX_TOOL_SECONDS")
     WEB_FETCH_TIMEOUT_SECONDS: float = Field(15.0, env="WEB_FETCH_TIMEOUT_SECONDS")
     WEB_FETCH_MAX_BYTES: int = Field(1048576, env="WEB_FETCH_MAX_BYTES")
+    TAVILY_API_KEY: Optional[str] = Field(None, env="TAVILY_API_KEY")
+    TAVILY_SEARCH_URL: str = Field(
+        "https://api.tavily.com/search", env="TAVILY_SEARCH_URL"
+    )
+    TAVILY_MAX_RESULTS: int = Field(5, env="TAVILY_MAX_RESULTS")
+    TAVILY_SEARCH_DEPTH: str = Field("basic", env="TAVILY_SEARCH_DEPTH")
 
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
+        extra = "ignore"
 
 settings = Settings()

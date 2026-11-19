@@ -32,6 +32,8 @@ def test_registry_has_all_tools(registry):
         "web_fetch",
         "web_search",
         "write_file",
+        "execute_python",
+        "create_chart",
     }
     assert set(names) == expected
 
@@ -115,6 +117,8 @@ def test_risk_tiers(registry):
         "create_crm_activity",
         "post_slack_message",
         "write_file",
+        "execute_python",
+        "create_chart",
     }
     for spec in registry.list_tools():
         assert spec.risk in (RISK_SAFE, RISK_APPROVAL_REQUIRED)

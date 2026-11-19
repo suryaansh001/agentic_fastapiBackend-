@@ -5,7 +5,11 @@ import pytest
 from langgraph.checkpoint.memory import MemorySaver
 
 from app.agent.llm import LLMResponse, ToolCall
-from app.agent.langgraph_engine import LangGraphEngine
+from app.agent.laya import ClassificationResult
+from app.agent.langgraph_engine import (
+    LangGraphEngine,
+    _extract_explicit_chart_call,
+)
 from app.agent.run_lifecycle import (
     CANCELLED,
     FAILED,
@@ -75,6 +79,40 @@ def _tool_response(tool_name, arguments, call_id="call_1"):
     )
 
 
+class FakeClassifier:
+    enabled = True
+
+    def __init__(self, result=None, error=None):
+        self.result = result or ClassificationResult(
+            choice="qualification",
+            probabilities={"qualification": 0.9, "llm": 0.1},
+        )
+        self.error = error
+        self.calls = []
+
+    async def classify_agent_route(self, message, context=None):
+        self.calls.append((message, context))
+        if self.error:
+            raise self.error
+        return self.result
+
+
+def test_extract_explicit_chart_call():
+    result = _extract_explicit_chart_call(
+        "Create a line chart using months = [Jan, Feb, Mar, Apr] "
+        "and profit/loss values = [12000, -3500, 8200, 15000]. "
+        "Save it as monthly_profit_loss."
+    )
+
+    assert result == {
+        "chartType": "line",
+        "x": ["Jan", "Feb", "Mar", "Apr"],
+        "y": [12000.0, -3500.0, 8200.0, 15000.0],
+        "title": None,
+        "filename": "monthly_profit_loss",
+    }
+
+
 # --- direct answers ------------------------------------------------------
 
 @pytest.mark.asyncio
@@ -128,6 +166,102 @@ async def test_llm_receives_tool_schemas_and_context(db_session):
     # System prompt + user message
     assert call["messages"][0]["role"] == "system"
     assert call["messages"][1]["role"] == "user"
+
+
+@pytest.mark.asyncio
+async def test_laya_route_is_added_as_advisory_context(db_session):
+    run = _new_run()
+    db_session.add(run)
+    await db_session.commit()
+
+    classifier = FakeClassifier()
+    llm = FakeLLM([LLMResponse(content="ok")])
+    engine = LangGraphEngine(
+        llm,
+        checkpointer=MemorySaver(),
+        classifier=classifier,
+    )
+    await engine.start_run(
+        run.id,
+        "agent_1",
+        "version_1",
+        {"message": "qualify this lead", "context": {"lead_id": "lead_1"}},
+        "user_1",
+    )
+
+    assert classifier.calls == [
+        ("qualify this lead", {"lead_id": "lead_1"})
+    ]
+    assert any(
+        "qualification" in message["content"]
+        for message in llm.calls[0]["messages"]
+        if message["role"] == "system"
+    )
+
+
+@pytest.mark.asyncio
+async def test_laya_failure_falls_back_to_llm(db_session):
+    run = _new_run()
+    db_session.add(run)
+    await db_session.commit()
+
+    classifier = FakeClassifier(
+        error=RuntimeError("not used")
+    )
+    # LayaClassificationError is the explicit adapter error; arbitrary
+    # exceptions must not be hidden by the graph.
+    from app.agent.laya import LayaClassificationError
+
+    classifier.error = LayaClassificationError("service unavailable")
+    llm = FakeLLM([LLMResponse(content="fallback")])
+    engine = LangGraphEngine(
+        llm,
+        checkpointer=MemorySaver(),
+        classifier=classifier,
+    )
+    result = await engine.start_run(
+        run.id, "agent_1", "version_1", {"message": "ambiguous"}, "user_1"
+    )
+
+    assert result["status"] == "SUCCEEDED"
+    assert result["response"] == "fallback"
+    assert any(
+        "fallback_reason" in message["content"]
+        for message in llm.calls[0]["messages"]
+        if message["role"] == "system"
+    )
+
+
+@pytest.mark.asyncio
+async def test_low_laya_confidence_delegates_to_normal_llm(db_session):
+    run = _new_run()
+    db_session.add(run)
+    await db_session.commit()
+
+    classifier = FakeClassifier(
+        result=ClassificationResult(
+            choice="follow_up",
+            probabilities={"follow_up": 0.22, "llm": 0.78},
+        )
+    )
+    llm = FakeLLM([LLMResponse(content="Here are the pipeline deals and companies.")])
+    engine = LangGraphEngine(
+        llm,
+        checkpointer=MemorySaver(),
+        classifier=classifier,
+    )
+    result = await engine.start_run(
+        run.id,
+        "agent_1",
+        "version_1",
+        {"message": "Show me deals in pipeline and how many companies are there"},
+        "user_1",
+    )
+
+    assert result["status"] == "SUCCEEDED"
+    assert result["classification"]["choice"] == "llm"
+    assert result["classification"]["original_choice"] == "follow_up"
+    assert "low Laya confidence" in llm.calls[0]["messages"][-1]["content"]
 
 
 # --- safe tool execution ---------------------------------------------------

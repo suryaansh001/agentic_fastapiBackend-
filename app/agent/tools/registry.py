@@ -14,9 +14,16 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from typing import Any, AsyncGenerator, Awaitable, Callable, Optional
 
+import httpx
 from opentelemetry.trace import StatusCode
 from pydantic import BaseModel, Field
 
+from app.agent.tools.charts import (
+    ChartError,
+    create_chart,
+    create_chart_fallback,
+)
+from app.agent.tools.code_exec import SandboxError, execute_python
 from app.agent.tools.crm_query import CrmQueryError, crm_query_service
 from app.agent.tools.filesystem import (
     WorkspaceError,
@@ -26,6 +33,7 @@ from app.agent.tools.filesystem import (
     write_text_file,
 )
 from app.agent.tools.web_fetch import WebFetchError, safe_fetch
+from app.config.settings import settings
 from app.telemetry.otel import get_tracer
 
 # Risk tiers. The execution engine (Phase 5 HITL) gates tools on these.
@@ -101,6 +109,50 @@ class WebFetchInput(BaseModel):
 
 class WebSearchInput(BaseModel):
     query: str
+    max_results: Optional[int] = Field(
+        None, ge=1, le=10, description="Number of results (1-10)"
+    )
+    search_depth: Optional[str] = Field(
+        None, description="basic or advanced"
+    )
+
+
+class ExecutePythonInput(BaseModel):
+    code: str = Field(..., description="Python source code to execute")
+    timeout: Optional[int] = Field(
+        None, description="Wall-clock timeout in seconds"
+    )
+
+
+class CreateChartInput(BaseModel):
+    chartType: str = Field(
+        "bar", description="bar, line, scatter, pie, area or donut"
+    )
+    x: "list | str" = Field(
+        ...,
+        description=(
+            "X values (labels for pie/donut). Pass an array of values, "
+            "or a column name together with `query`."
+        ),
+    )
+    y: "list | str" = Field(
+        ...,
+        description=(
+            "Y values. Pass an array of values, or a column name "
+            "together with `query`."
+        ),
+    )
+    title: Optional[str] = None
+    labels: Optional[dict] = None
+    filename: Optional[str] = None
+    asPng: bool = False
+    query: Optional[dict] = Field(
+        None,
+        description=(
+            "Optional CRM query {operation, params} used to fetch "
+            "data when x/y are column names."
+        ),
+    )
 
 
 class WriteFileInput(BaseModel):
@@ -319,7 +371,48 @@ async def _web_fetch(ctx: ToolContext, args: dict) -> dict:
 
 async def _web_search(ctx: ToolContext, args: dict) -> dict:
     data = WebSearchInput(**args)
-    return {"results": [], "note": "web_search is not configured"}
+    api_key = settings.TAVILY_API_KEY
+    if not api_key:
+        return {"results": [], "note": "web_search is not configured"}
+    payload = {
+        "api_key": api_key,
+        "query": data.query,
+        "max_results": data.max_results or settings.TAVILY_MAX_RESULTS,
+        "search_depth": data.search_depth or settings.TAVILY_SEARCH_DEPTH,
+        "include_answer": True,
+        "include_raw_content": False,
+    }
+    try:
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            response = await client.post(settings.TAVILY_SEARCH_URL, json=payload)
+            response.raise_for_status()
+            body = response.json()
+    except httpx.HTTPStatusError as exc:
+        return {
+            "results": [],
+            "error": (
+                f"Tavily HTTP {exc.response.status_code}: "
+                f"{exc.response.text[:200]}"
+            ),
+        }
+    except (httpx.HTTPError, ValueError) as exc:
+        return {"results": [], "error": f"Tavily search failed: {exc}"}
+    results = [
+        {
+            "title": item.get("title"),
+            "url": item.get("url"),
+            "content": item.get("content"),
+            "score": item.get("score"),
+        }
+        for item in body.get("results", [])
+        if isinstance(item, dict)
+    ]
+    return {
+        "query": data.query,
+        "answer": body.get("answer"),
+        "count": len(results),
+        "results": results,
+    }
 
 
 async def _write_file(ctx: ToolContext, args: dict) -> dict:
@@ -329,6 +422,95 @@ async def _write_file(ctx: ToolContext, args: dict) -> dict:
         return {"written": True, "path": path, "success": True}
     except WorkspaceError as e:
         return {"success": False, "error": str(e)}
+
+
+async def _execute_python(ctx: ToolContext, args: dict) -> dict:
+    data = ExecutePythonInput(**args)
+    try:
+        result = await execute_python(
+            data.code,
+            run_id=ctx.run_id,
+            timeout=data.timeout or 30,
+        )
+    except SandboxError as e:
+        return {"success": False, "error": str(e)}
+    return {**result, "success": result.get("returncode") == 0}
+
+
+def _is_column_ref(value) -> bool:
+    return isinstance(value, str)
+
+
+def _resolve_series(value, rows, columns, default_index):
+    """Resolve a column-name reference against query columns."""
+    if isinstance(value, list) and value:
+        return value
+    if not rows or not columns:
+        return value
+    key = str(value).strip().lower() if value is not None else ""
+    for idx, col in enumerate(columns):
+        if str(col).strip().lower() == key:
+            return [row[idx] for row in rows]
+    for idx, col in enumerate(columns):
+        col_key = str(col).strip().lower()
+        if key and (key in col_key or col_key in key):
+            return [row[idx] for row in rows]
+    if default_index is not None and default_index < len(columns):
+        return [row[default_index] for row in rows]
+    return value
+
+
+async def _run_query(ctx: ToolContext, query: dict) -> tuple[list, list]:
+    operation = (query or {}).get("operation")
+    if not operation:
+        return [], []
+    params = (query or {}).get("params") or {}
+    try:
+        async with _session_for(ctx) as session:
+            result = await crm_query_service.execute(session, operation, params)
+    except CrmQueryError:
+        return [], []
+    return result.get("rows") or [], result.get("columns") or []
+
+
+async def _create_chart(ctx: ToolContext, args: dict) -> dict:
+    data = CreateChartInput(**args)
+    x, y = data.x, data.y
+
+    if data.query is not None:
+        rows, columns = await _run_query(ctx, data.query)
+        x = _resolve_series(x, rows, columns, 0)
+        y = _resolve_series(y, rows, columns, 1)
+
+    try:
+        result = create_chart(
+            chart_type=data.chartType,
+            x=x,
+            y=y,
+            title=data.title,
+            labels=data.labels,
+            filename=data.filename,
+            as_png=data.asPng,
+        )
+    except ChartError as plotly_error:
+        try:
+            result = create_chart_fallback(
+                chart_type=data.chartType,
+                x=x,
+                y=y,
+                title=data.title,
+                filename=data.filename,
+            )
+        except Exception as fallback_error:
+            return {
+                "success": False,
+                "error": (
+                    f"plotly failed: {plotly_error}; "
+                    f"matplotlib fallback failed: {fallback_error}"
+                ),
+            }
+        result = {**result, "fallback": str(plotly_error)}
+    return {"success": True, **result}
 
 
 def _schema(model: type[BaseModel]) -> dict:
@@ -355,8 +537,8 @@ def _build_default_registry() -> ToolRegistry:
             name="query_crm",
             description=(
                 "Run an allow-listed, read-only CRM query. Supported "
-                "operations: list_companies, list_deals, search_contacts, search_companies, "
-                "deal_pipeline, contact_timeline, company_contacts, deal_summary."
+                "operations: list_companies, list_leads, list_deals, search_contacts, search_companies, "
+                "deal_pipeline, contact_timeline, company_contacts, deal_summary, list_emails."
             ),
             parameters=_schema(QueryCRMInput),
             handler=_query_crm,
@@ -472,6 +654,31 @@ def _build_default_registry() -> ToolRegistry:
             parameters=_schema(WriteFileInput),
             risk=RISK_APPROVAL_REQUIRED,
             handler=_write_file,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="execute_python",
+            description=(
+                "Execute Python in an isolated sandbox and return "
+                "stdout/stderr and any files it wrote."
+            ),
+            parameters=_schema(ExecutePythonInput),
+            risk=RISK_APPROVAL_REQUIRED,
+            handler=_execute_python,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="create_chart",
+            description=(
+                "Create a chart (bar, line, scatter, pie, area, donut) "
+                "from values or a CRM query and write it to the "
+                "workspace."
+            ),
+            parameters=_schema(CreateChartInput),
+            risk=RISK_APPROVAL_REQUIRED,
+            handler=_create_chart,
         )
     )
     return registry
