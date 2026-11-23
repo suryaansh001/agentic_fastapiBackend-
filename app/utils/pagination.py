@@ -24,3 +24,26 @@ def list_input_validator(q: str = "", sort: str = "", dir: str = "asc", page: in
 
 def build_list_response(rows, total, facet_counts=None):
     return {"rows": rows, "total": total, "facetCounts": facet_counts or {}}
+
+
+def apply_list(stmt, model, input, search_fields=()):
+    """Apply q, filters, sort and pagination to a SQLAlchemy select."""
+    from sqlalchemy import or_
+
+    if input.q and search_fields:
+        clauses = [getattr(model, field).ilike(f"%{input.q}%") for field in search_fields if hasattr(model, field)]
+        if clauses:
+            stmt = stmt.where(or_(*clauses))
+    for key, value in (input.filters or {}).items():
+        if value in (None, "", []):
+            continue
+        column = getattr(model, key, None)
+        if column is not None:
+            stmt = stmt.where(column == value)
+    sort_column = getattr(model, input.sort, None) if input.sort else None
+    if sort_column is None:
+        sort_column = getattr(model, "created_at", None)
+    if sort_column is not None:
+        stmt = stmt.order_by(sort_column.desc() if input.dir.lower() == "desc" else sort_column.asc())
+    pagination = Pagination(page=input.page, page_size=input.page_size)
+    return stmt.offset(pagination.skip).limit(pagination.page_size)

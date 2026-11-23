@@ -55,6 +55,12 @@ class Settings(BaseSettings):
     )
     TAVILY_MAX_RESULTS: int = Field(5, env="TAVILY_MAX_RESULTS")
     TAVILY_SEARCH_DEPTH: str = Field("basic", env="TAVILY_SEARCH_DEPTH")
+    SMTP_HOST: Optional[str] = Field(None, env="SMTP_HOST")
+    SMTP_PORT: int = Field(587, env="SMTP_PORT")
+    SMTP_USER: Optional[str] = Field(None, env="SMTP_USER")
+    SMTP_PASSWORD: Optional[str] = Field(None, env="SMTP_PASSWORD")
+    SMTP_FROM: Optional[str] = Field(None, env="SMTP_FROM")
+    SMTP_USE_TLS: bool = Field(True, env="SMTP_USE_TLS")
 
     class Config:
         env_file = ".env"

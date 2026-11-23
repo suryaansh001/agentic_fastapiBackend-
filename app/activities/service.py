@@ -2,13 +2,14 @@ from typing import Optional, Dict
 from app.database.models import Activity
 from app.database.session import async_session_factory
 from sqlalchemy import select, func
+from app.utils.pagination import apply_list
 
 class ActivitiesService:
     async def list(self, input: Dict) -> Dict:
         async with async_session_factory() as session:
             stmt = select(Activity)
             total_stmt = select(func.count(Activity.id))
-            rows_result = await session.execute(stmt)
+            rows_result = await session.execute(apply_list(stmt, Activity, input, ['subject', 'body']))
             total_result = await session.execute(total_stmt)
             rows = rows_result.scalars().all()
             total = total_result.scalar()

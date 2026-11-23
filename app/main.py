@@ -29,6 +29,10 @@ def setup_app(app: FastAPI) -> None:
     from app.workspace.router import router as workspace_router
     from app.users.router import router as users_router
     from app.settings.router import router as settings_router
+    from app.departments.router import router as departments_router
+    from app.campaigns.router import router as campaigns_router
+    from app.emails.router import router as emails_router
+    from app.analytics.router import router as analytics_router
     from app.saved_views.router import router as saved_views_router
     from app.dashboard.router import router as dashboard_router
     from app.cache.router import router as cache_router
@@ -63,6 +67,10 @@ def setup_app(app: FastAPI) -> None:
     app.include_router(workspace_router, prefix="/api/workspace")
     app.include_router(users_router, prefix="/api/users")
     app.include_router(settings_router, prefix="/api/settings")
+    app.include_router(departments_router, prefix="/api/departments")
+    app.include_router(campaigns_router, prefix="/api/campaigns")
+    app.include_router(emails_router, prefix="/api/emails")
+    app.include_router(analytics_router, prefix="/api/analytics")
     app.include_router(saved_views_router, prefix="/api/saved-views")
     app.include_router(dashboard_router, prefix="/api/dashboard")
     app.include_router(cache_router, prefix="/api/cache")

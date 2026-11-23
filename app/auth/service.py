@@ -6,7 +6,7 @@ from typing import Optional
 from jose import jwt
 from sqlalchemy import select
 from app.config.settings import settings
-from app.database.models import User
+from app.database.models import Member, Organization, User
 from app.database.session import async_session_factory
 
 PASSWORD_ITERATIONS = 600_000
@@ -20,6 +20,7 @@ class AuthService:
         if not user or not self._verify_password(password, user["password_hash"]):
             raise ValueError("Invalid credentials")
         token = self._create_session(user["id"])
+        user.pop("password_hash", None)
         return {"token": token, "user": user}
 
     async def _find_user(self, email: str) -> Optional[dict]:
@@ -62,6 +63,35 @@ class AuthService:
         return f"pbkdf2_sha256${PASSWORD_ITERATIONS}${salt.hex()}${digest}"
 
     async def sign_up(self, name: str, email: str, password: str) -> dict:
-        return {"id": "", "name": name, "email": email}
+        async with async_session_factory() as session:
+            existing = await session.scalar(select(User).where(User.email.ilike(email)))
+            if existing:
+                raise ValueError("An account with this email already exists")
+            user = User(
+                name=name,
+                email=email.lower(),
+                password_hash=self.hash_password(password),
+                email_verified=False,
+            )
+            session.add(user)
+            await session.flush()
+            organization = await session.scalar(select(Organization).limit(1))
+            if organization is None:
+                organization = Organization(
+                    name="Agentic CRM",
+                    slug="agentic-crm",
+                    website=settings.APP_URL,
+                )
+                session.add(organization)
+                await session.flush()
+            session.add(
+                Member(
+                    organization_id=organization.id,
+                    user_id=user.id,
+                    role="member",
+                )
+            )
+            await session.commit()
+            return {"id": user.id, "name": user.name, "email": user.email}
 
 auth_service = AuthService()

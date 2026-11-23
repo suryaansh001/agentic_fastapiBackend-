@@ -16,7 +16,14 @@ from app.database.models import (
     Contact,
     Deal,
     DealContact,
+    Campaign,
+    CampaignEvent,
+    CampaignRecipient,
     DealStage,
+    Department,
+    DepartmentMember,
+    EmailMessage,
+    EmailTemplate,
     EmailThread,
     EnrichmentStatus,
     ForecastCategory,
@@ -27,7 +34,7 @@ from app.database.models import (
     RecordSource,
     User,
 )
-from app.database.session import async_session_factory, engine
+from app.database.session import Base, async_session_factory, engine
 from app.auth.service import AuthService
 
 
@@ -102,6 +109,167 @@ async def ensure_agents(session, admin_id):
             ROUTE_INSTRUCTIONS.get(route, ""),
         )
     await session.commit()
+
+
+DEMO_DEPARTMENT_USERS = {
+    "sales": ("Jordan Lee", "sales@agentic-crm.local", "manager", "Sales Manager"),
+    "marketing": ("Priya Shah", "marketing@agentic-crm.local", "manager", "Marketing Manager"),
+    "support": ("Noah Kim", "support@agentic-crm.local", "manager", "Support Manager"),
+    "hr": ("Ava Brown", "hr@agentic-crm.local", "manager", "HR Manager"),
+    "finance": ("Ethan Davis", "finance@agentic-crm.local", "manager", "Finance Manager"),
+    "operations": ("Mia Wilson", "operations@agentic-crm.local", "manager", "Operations Manager"),
+}
+
+
+async def ensure_departments(session, admin_id):
+    from app.rbac import DEPARTMENTS
+
+    for key, meta in DEPARTMENTS.items():
+        department = await session.scalar(select(Department).where(Department.key == key))
+        if department is None:
+            department = Department(key=key, name=meta["name"], description=meta["description"])
+            session.add(department)
+            await session.flush()
+        if key == "executive":
+            membership = await session.scalar(
+                select(DepartmentMember).where(
+                    DepartmentMember.department_id == department.id,
+                    DepartmentMember.user_id == admin_id,
+                )
+            )
+            if membership is None:
+                session.add(DepartmentMember(department_id=department.id, user_id=admin_id, role="manager", job_title="Administrator"))
+
+    for key, (name, email, role, title) in DEMO_DEPARTMENT_USERS.items():
+        department = await session.scalar(select(Department).where(Department.key == key))
+        user = await session.scalar(select(User).where(User.email == email))
+        if user is None:
+            user = User(
+                id=f"seed-{key}-user",
+                name=name,
+                email=email,
+                password_hash=AuthService.hash_password("password123"),
+                email_verified=True,
+            )
+            session.add(user)
+            await session.flush()
+        membership = await session.scalar(
+            select(DepartmentMember).where(
+                DepartmentMember.department_id == department.id,
+                DepartmentMember.user_id == user.id,
+            )
+        )
+        if membership is None:
+            session.add(DepartmentMember(department_id=department.id, user_id=user.id, role=role, job_title=title))
+    await session.commit()
+
+
+
+async def ensure_email_messages(session, admin_id):
+    threads = (await session.execute(select(EmailThread))).scalars().all()
+    for thread in threads:
+        existing = await session.scalar(select(EmailMessage).where(EmailMessage.thread_id == thread.id).limit(1))
+        if existing is not None:
+            continue
+        contact = await session.get(Contact, thread.contact_id) if thread.contact_id else None
+        first_name = contact.first_name if contact else "there"
+        email = contact.email if contact else None
+        now = datetime.utcnow()
+        session.add_all([
+            EmailMessage(
+                thread_id=thread.id,
+                contact_id=thread.contact_id,
+                company_id=thread.company_id,
+                direction="inbound",
+                from_email=email,
+                to_email="admin@agentic-crm.local",
+                subject=thread.subject or "Conversation",
+                body=f"Hi Alex,\n\nThanks for the note. We are reviewing priorities for next quarter and would like to understand how this could fit.\n\nBest,\n{first_name}",
+                status="received",
+                sent_at=now - timedelta(days=4),
+                created_by_id=admin_id,
+            ),
+            EmailMessage(
+                thread_id=thread.id,
+                contact_id=thread.contact_id,
+                company_id=thread.company_id,
+                direction="outbound",
+                from_email="admin@agentic-crm.local",
+                to_email=email,
+                subject=f"Re: {thread.subject or 'Conversation'}",
+                body=f"Hi {first_name},\n\nHappy to walk through a short demo and tailor it to your priorities. Would Tuesday or Thursday work?\n\nBest,\nAlex",
+                status="sent",
+                sent_at=now - timedelta(days=3),
+                created_by_id=admin_id,
+            ),
+        ])
+    await session.commit()
+
+
+
+async def ensure_campaigns(session, admin_id):
+    existing = await session.get(Campaign, "seed-campaign-q4")
+    if existing is not None:
+        return
+    now = datetime.utcnow()
+    campaign = Campaign(
+        id="seed-campaign-q4",
+        name="Q4 revenue operations nurture",
+        department="marketing",
+        owner_id=admin_id,
+        status="sent",
+        type="email",
+        subject="A faster way to forecast revenue",
+        body="Hi {{first_name}},\n\nTeams like yours use Agentic CRM to turn fragmented pipeline data into a reliable weekly forecast.\n\nWorth a short conversation?\n\nBest,\nAlex",
+        segment_filter={"lifecycle_stage": "LEAD", "limit": 6},
+        sent_at=now - timedelta(days=5),
+    )
+    session.add(campaign)
+    await session.flush()
+
+    contacts = (await session.execute(select(Contact).where(Contact.email.is_not(None)).limit(6))).scalars().all()
+    outcomes = [
+        ("opened", "clicked", "replied"),
+        ("opened", None, None),
+        ("opened", "clicked", None),
+        (None, None, None),
+        ("opened", None, "replied"),
+        ("opened", "clicked", "replied"),
+    ]
+    for contact, (opened, clicked, replied) in zip(contacts, outcomes):
+        sent_at = now - timedelta(days=5)
+        recipient = CampaignRecipient(
+            campaign_id=campaign.id,
+            contact_id=contact.id,
+            company_id=contact.company_id,
+            email=contact.email,
+            status="sent",
+            sent_at=sent_at,
+            opened_at=sent_at + timedelta(hours=3) if opened else None,
+            clicked_at=sent_at + timedelta(hours=5) if clicked else None,
+            replied_at=sent_at + timedelta(days=1) if replied else None,
+        )
+        session.add(recipient)
+        await session.flush()
+        session.add(CampaignEvent(campaign_id=campaign.id, recipient_id=recipient.id, event_type="sent", meta={"seeded": True}))
+        if opened:
+            session.add(CampaignEvent(campaign_id=campaign.id, recipient_id=recipient.id, event_type="open", meta={"seeded": True}))
+        if clicked:
+            session.add(CampaignEvent(campaign_id=campaign.id, recipient_id=recipient.id, event_type="click", meta={"seeded": True}))
+        if replied:
+            session.add(CampaignEvent(campaign_id=campaign.id, recipient_id=recipient.id, event_type="reply", meta={"seeded": True}))
+
+    template = await session.scalar(select(EmailTemplate).where(EmailTemplate.name == "Discovery follow-up"))
+    if template is None:
+        session.add(EmailTemplate(
+            name="Discovery follow-up",
+            department="sales",
+            subject="Next steps after our conversation",
+            body="Hi {{first_name}},\n\nThanks for the conversation. I have attached the summary and suggested next steps.\n\nBest,\nAlex",
+            created_by_id=admin_id,
+        ))
+    await session.commit()
+
 
 
 DEMO_COMPANIES = [
@@ -1191,14 +1359,19 @@ async def ensure_demo_data(session, admin_id):
 
 
 async def seed():
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.create_all)
     async with async_session_factory() as session:
         existing = await session.scalar(select(User).where(User.email == "admin@agentic-crm.local"))
         if existing:
             if not existing.password_hash:
                 existing.password_hash = AuthService.hash_password("password123")
                 await session.commit()
+            await ensure_departments(session, existing.id)
             await ensure_agents(session, existing.id)
             await ensure_demo_data(session, existing.id)
+            await ensure_campaigns(session, existing.id)
+            await ensure_email_messages(session, existing.id)
             print("seed_status=already_present")
             print(f"admin_email={existing.email}")
             print("admin_password=password123")
@@ -1303,8 +1476,11 @@ async def seed():
         )
         session.add_all([deal, deal_contact, activity])
         await session.commit()
+        await ensure_departments(session, ADMIN_ID)
         await ensure_agents(session, ADMIN_ID)
         await ensure_demo_data(session, ADMIN_ID)
+        await ensure_campaigns(session, ADMIN_ID)
+        await ensure_email_messages(session, ADMIN_ID)
         print("seed_status=created")
         print("admin_email=admin@agentic-crm.local")
         print("admin_password=password123")

@@ -1,24 +1,14 @@
 from fastapi import APIRouter, Depends
-from app.dependencies.auth import get_current_user, CurrentUser
+from app.dependencies.auth import CurrentUser, require_permission
+from app.archive.service import ArchiveService
 
 router = APIRouter()
+service = ArchiveService()
 
 @router.get("/")
-async def list_items(current_user: CurrentUser = Depends(get_current_user)):
-    return {"items": []}
-
-@router.get("/{id}")
-async def get_item(id: str, current_user: CurrentUser = Depends(get_current_user)):
-    return {"id": id}
-
-@router.post("/")
-async def create_item(data: dict, current_user: CurrentUser = Depends(get_current_user)):
-    return {"id": "new", **data}
+async def list_archive(current_user: CurrentUser = Depends(require_permission("crm.read"))):
+    return {"items": await service.list()}
 
 @router.put("/{id}")
-async def update_item(id: str, data: dict, current_user: CurrentUser = Depends(get_current_user)):
-    return {"id": id, **data}
-
-@router.delete("/{id}")
-async def delete_item(id: str, current_user: CurrentUser = Depends(get_current_user)):
-    return {"deleted": True}
+async def restore_archive(id: str, entity_type: str = "", current_user: CurrentUser = Depends(require_permission("crm.write"))):
+    return await service.restore(id, entity_type)

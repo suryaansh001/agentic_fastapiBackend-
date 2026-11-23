@@ -860,3 +860,161 @@ class LLMCallLog(Base):
     success: Mapped[bool] = mapped_column(Boolean, default=True)
     error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+# ── Phase 0/1: departments, RBAC, audit, campaigns, email ──────────────────
+
+class Department(Base):
+    __tablename__ = "department"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    key: Mapped[str] = mapped_column(String, unique=True, nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    manager_id: Mapped[Optional[str]] = mapped_column(String, ForeignKey("user.id"), nullable=True)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+
+
+class DepartmentMember(Base):
+    __tablename__ = "department_member"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    department_id: Mapped[str] = mapped_column(String, ForeignKey("department.id"), nullable=False, index=True)
+    user_id: Mapped[str] = mapped_column(String, ForeignKey("user.id"), nullable=False, index=True)
+    role: Mapped[str] = mapped_column(String, default="member", nullable=False)
+    job_title: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    manager_id: Mapped[Optional[str]] = mapped_column(String, ForeignKey("user.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+
+
+class AuditLog(Base):
+    __tablename__ = "audit_log"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    actor_id: Mapped[Optional[str]] = mapped_column(String, ForeignKey("user.id"), nullable=True, index=True)
+    action: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    entity_type: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    entity_id: Mapped[Optional[str]] = mapped_column(String, nullable=True, index=True)
+    department: Mapped[Optional[str]] = mapped_column(String, nullable=True, index=True)
+    detail: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), index=True)
+
+
+class Notification(Base):
+    __tablename__ = "notification"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id: Mapped[str] = mapped_column(String, ForeignKey("user.id"), nullable=False, index=True)
+    title: Mapped[str] = mapped_column(String, nullable=False)
+    body: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    kind: Mapped[str] = mapped_column(String, default="info")
+    read: Mapped[bool] = mapped_column(Boolean, default=False)
+    link: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class EmailTemplate(Base):
+    __tablename__ = "email_template"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    department: Mapped[Optional[str]] = mapped_column(String, nullable=True, index=True)
+    subject: Mapped[str] = mapped_column(String, nullable=False)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    created_by_id: Mapped[Optional[str]] = mapped_column(String, ForeignKey("user.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+
+
+class Campaign(Base):
+    __tablename__ = "campaign"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    department: Mapped[str] = mapped_column(String, default="marketing", index=True)
+    owner_id: Mapped[str] = mapped_column(String, ForeignKey("user.id"), nullable=False)
+    status: Mapped[str] = mapped_column(String, default="draft", index=True)
+    type: Mapped[str] = mapped_column(String, default="email")
+    subject: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    body: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    segment_filter: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    scheduled_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    sent_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+
+
+class CampaignRecipient(Base):
+    __tablename__ = "campaign_recipient"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    campaign_id: Mapped[str] = mapped_column(String, ForeignKey("campaign.id"), nullable=False, index=True)
+    contact_id: Mapped[Optional[str]] = mapped_column(String, ForeignKey("contact.id"), nullable=True)
+    company_id: Mapped[Optional[str]] = mapped_column(String, ForeignKey("company.id"), nullable=True)
+    email: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    status: Mapped[str] = mapped_column(String, default="queued", index=True)
+    sent_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    opened_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    clicked_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    replied_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    converted_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class CampaignEvent(Base):
+    __tablename__ = "campaign_event"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    campaign_id: Mapped[str] = mapped_column(String, ForeignKey("campaign.id"), nullable=False, index=True)
+    recipient_id: Mapped[Optional[str]] = mapped_column(String, ForeignKey("campaign_recipient.id"), nullable=True)
+    event_type: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    meta: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class EmailMessage(Base):
+    __tablename__ = "email_message"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    thread_id: Mapped[Optional[str]] = mapped_column(String, ForeignKey("email_thread.id"), nullable=True, index=True)
+    campaign_id: Mapped[Optional[str]] = mapped_column(String, ForeignKey("campaign.id"), nullable=True, index=True)
+    contact_id: Mapped[Optional[str]] = mapped_column(String, ForeignKey("contact.id"), nullable=True)
+    company_id: Mapped[Optional[str]] = mapped_column(String, ForeignKey("company.id"), nullable=True)
+    deal_id: Mapped[Optional[str]] = mapped_column(String, ForeignKey("deal.id"), nullable=True)
+    direction: Mapped[str] = mapped_column(String, default="outbound")
+    from_email: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    to_email: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    subject: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    body: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(String, default="draft", index=True)
+    sent_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    opened_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    clicked_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    created_by_id: Mapped[Optional[str]] = mapped_column(String, ForeignKey("user.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class ApiKey(Base):
+    __tablename__ = "api_key"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    prefix: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    key_hash: Mapped[str] = mapped_column(String, nullable=False)
+    user_id: Mapped[Optional[str]] = mapped_column(String, ForeignKey("user.id"), nullable=True)
+    department: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    last_used_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    revoked_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class AppConfig(Base):
+    __tablename__ = "app_config"
+
+    key: Mapped[str] = mapped_column(String, primary_key=True)
+    value: Mapped[dict] = mapped_column(JSON, nullable=False, default="{}")
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())

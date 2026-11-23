@@ -2,6 +2,7 @@ from typing import Optional, Dict, Any, List
 from app.database.models import Company, Contact, Deal, Activity, FieldValue
 from app.database.session import async_session_factory
 from sqlalchemy import select, func, and_
+from app.utils.pagination import apply_list
 from app.companies.domain import normalize_domain
 from app.crm.activity_stamp import stamp_last_activity
 
@@ -10,7 +11,7 @@ class CompaniesService:
         async with async_session_factory() as session:
             stmt = select(Company)
             total_stmt = select(func.count(Company.id))
-            rows_result = await session.execute(stmt)
+            rows_result = await session.execute(apply_list(stmt, Company, input, ['name', 'domain', 'industry', 'email']))
             total_result = await session.execute(total_stmt)
             rows = rows_result.scalars().all()
             total = total_result.scalar()

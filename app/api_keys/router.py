@@ -1,24 +1,18 @@
 from fastapi import APIRouter, Depends
-from app.dependencies.auth import get_current_user, CurrentUser
+from app.dependencies.auth import CurrentUser, require_permission
+from app.api_keys.service import ApiKeysService
 
 router = APIRouter()
+service = ApiKeysService()
 
 @router.get("/")
-async def list_items(current_user: CurrentUser = Depends(get_current_user)):
-    return {"items": []}
-
-@router.get("/{id}")
-async def get_item(id: str, current_user: CurrentUser = Depends(get_current_user)):
-    return {"id": id}
+async def list_keys(current_user: CurrentUser = Depends(require_permission("crm.read"))):
+    return {"items": await service.list(current_user.id)}
 
 @router.post("/")
-async def create_item(data: dict, current_user: CurrentUser = Depends(get_current_user)):
-    return {"id": "new", **data}
-
-@router.put("/{id}")
-async def update_item(id: str, data: dict, current_user: CurrentUser = Depends(get_current_user)):
-    return {"id": id, **data}
+async def create_key(data: dict, current_user: CurrentUser = Depends(require_permission("crm.write"))):
+    return await service.create(data, current_user.id)
 
 @router.delete("/{id}")
-async def delete_item(id: str, current_user: CurrentUser = Depends(get_current_user)):
-    return {"deleted": True}
+async def delete_key(id: str, current_user: CurrentUser = Depends(require_permission("crm.write"))):
+    return await service.remove(id)

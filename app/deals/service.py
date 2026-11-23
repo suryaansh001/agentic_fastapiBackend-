@@ -3,6 +3,7 @@ from datetime import datetime
 from app.database.models import Deal, DealStage
 from app.database.session import async_session_factory
 from sqlalchemy import select, func
+from app.utils.pagination import apply_list
 from app.crm.activity_stamp import stamp_stage_change
 
 class DealsService:
@@ -10,7 +11,7 @@ class DealsService:
         async with async_session_factory() as session:
             stmt = select(Deal)
             total_stmt = select(func.count(Deal.id))
-            rows_result = await session.execute(stmt)
+            rows_result = await session.execute(apply_list(stmt, Deal, input, ['name', 'description']))
             total_result = await session.execute(total_stmt)
             rows = rows_result.scalars().all()
             total = total_result.scalar()

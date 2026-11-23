@@ -1,13 +1,13 @@
 from pydantic import BaseModel
 from typing import Optional, Dict, Any
 
-class SavedViewsCreate(BaseModel):
-    pass
+class SavedViewCreate(BaseModel):
+    entity: str
+    name: str
+    filters: Dict[str, Any] = {}
+    shared: bool = False
 
-class SavedViewsUpdate(BaseModel):
-    pass
-
-class SavedViewsResponse(BaseModel):
-    id: str
-    class Config:
-        from_attributes = True
+class SavedViewUpdate(BaseModel):
+    name: Optional[str] = None
+    filters: Optional[Dict[str, Any]] = None
+    shared: Optional[bool] = None
