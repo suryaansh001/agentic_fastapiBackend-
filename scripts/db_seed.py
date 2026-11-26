@@ -12,6 +12,8 @@ from app.database.models import (
     AgentDefinitionStatus,
     AgentVersion,
     AgentVersionStatus,
+    Asset,
+    Attendance,
     Company,
     Contact,
     Deal,
@@ -26,13 +28,18 @@ from app.database.models import (
     EmailTemplate,
     EmailThread,
     EnrichmentStatus,
+    Expense,
     ForecastCategory,
+    Invoice,
     LeadStatus,
+    LeaveRequest,
     LifecycleStage,
     Member,
     Organization,
     RecordSource,
+    SupportTicket,
     User,
+    WorkRequest,
 )
 from app.database.session import Base, async_session_factory, engine
 from app.auth.service import AuthService
@@ -1358,6 +1365,65 @@ async def ensure_demo_data(session, admin_id):
     await session.commit()
 
 
+async def ensure_module_demo_data(session, admin_id):
+    now = datetime.utcnow()
+    company_id = await session.scalar(select(Company.id).limit(1)) or COMPANY_ID
+
+    for spec in [
+        {"id": "seed-attendance-today", "date": now.replace(hour=0, minute=0, second=0, microsecond=0), "hours": 8.0, "status": "present"},
+        {"id": "seed-attendance-yesterday", "date": now.replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=1), "hours": 8.0, "status": "remote"},
+        {"id": "seed-attendance-two-days", "date": now.replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=2), "hours": 7.5, "status": "present"},
+    ]:
+        if await session.get(Attendance, spec["id"]) is None:
+            session.add(Attendance(user_id=admin_id, **spec))
+
+    for spec in [
+        {"id": "seed-leave-requested", "type": "vacation", "start_date": now + timedelta(days=10), "end_date": now + timedelta(days=14), "days": 5, "status": "requested", "reason": "Family trip"},
+        {"id": "seed-leave-approved", "type": "sick", "start_date": now - timedelta(days=7), "end_date": now - timedelta(days=6), "days": 2, "status": "approved", "reason": "Recovery"},
+    ]:
+        if await session.get(LeaveRequest, spec["id"]) is None:
+            session.add(LeaveRequest(user_id=admin_id, **spec))
+
+    for spec in [
+        {"id": "seed-ticket-onboarding", "subject": "Onboarding checklist for Northstar", "description": "Customer needs help importing contacts.", "status": "open", "priority": "high"},
+        {"id": "seed-ticket-billing", "subject": "Invoice copy request", "description": "Finance team requested a duplicate invoice.", "status": "pending", "priority": "medium"},
+        {"id": "seed-ticket-resolved", "subject": "Login issue resolved", "description": "Password reset completed.", "status": "resolved", "priority": "low"},
+    ]:
+        if await session.get(SupportTicket, spec["id"]) is None:
+            session.add(SupportTicket(company_id=company_id, **spec))
+
+    for spec in [
+        {"id": "seed-invoice-001", "number": "INV-0001", "amount": 72000.0, "currency": "USD", "status": "open", "due_date": now + timedelta(days=30)},
+        {"id": "seed-invoice-002", "number": "INV-0002", "amount": 18500.0, "currency": "USD", "status": "paid", "due_date": now - timedelta(days=5)},
+    ]:
+        if await session.get(Invoice, spec["id"]) is None:
+            session.add(Invoice(company_id=company_id, **spec))
+
+    for spec in [
+        {"id": "seed-expense-travel", "category": "Travel", "amount": 1240.0, "currency": "USD", "status": "approved", "date": now - timedelta(days=3)},
+        {"id": "seed-expense-software", "category": "Software", "amount": 890.0, "currency": "USD", "status": "submitted", "date": now - timedelta(days=1)},
+    ]:
+        if await session.get(Expense, spec["id"]) is None:
+            session.add(Expense(user_id=admin_id, **spec))
+
+    for spec in [
+        {"id": "seed-asset-laptop", "name": "MacBook Pro 16", "type": "Laptop", "status": "active"},
+        {"id": "seed-asset-license", "name": "Analytics platform license", "type": "Software", "status": "active"},
+        {"id": "seed-asset-vehicle", "name": "Field vehicle", "type": "Vehicle", "status": "maintenance"},
+    ]:
+        if await session.get(Asset, spec["id"]) is None:
+            session.add(Asset(**spec))
+
+    for spec in [
+        {"id": "seed-request-onboarding", "title": "Set up new hire workspace", "status": "open"},
+        {"id": "seed-request-audit", "title": "Quarterly asset audit", "status": "in_progress"},
+    ]:
+        if await session.get(WorkRequest, spec["id"]) is None:
+            session.add(WorkRequest(**spec))
+
+    await session.commit()
+
+
 async def seed():
     async with engine.begin() as connection:
         await connection.run_sync(Base.metadata.create_all)
@@ -1372,6 +1438,7 @@ async def seed():
             await ensure_demo_data(session, existing.id)
             await ensure_campaigns(session, existing.id)
             await ensure_email_messages(session, existing.id)
+            await ensure_module_demo_data(session, existing.id)
             print("seed_status=already_present")
             print(f"admin_email={existing.email}")
             print("admin_password=password123")
@@ -1481,6 +1548,7 @@ async def seed():
         await ensure_demo_data(session, ADMIN_ID)
         await ensure_campaigns(session, ADMIN_ID)
         await ensure_email_messages(session, ADMIN_ID)
+        await ensure_module_demo_data(session, ADMIN_ID)
         print("seed_status=created")
         print("admin_email=admin@agentic-crm.local")
         print("admin_password=password123")

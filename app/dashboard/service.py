@@ -3,16 +3,23 @@ from sqlalchemy import func, select
 from app.database.models import (
     Activity,
     ActivityType,
+    Asset,
+    Attendance,
     Campaign,
     CampaignRecipient,
     Company,
     Contact,
     Deal,
     DealStage,
-    DepartmentMember,
     Department,
+    DepartmentMember,
+    Expense,
+    Invoice,
+    LeaveRequest,
     LifecycleStage,
+    SupportTicket,
     User,
+    WorkRequest,
 )
 from app.database.session import async_session_factory
 
@@ -51,7 +58,6 @@ class DashboardService:
     async def _sales(self, session):
         now = datetime.utcnow()
         week_ago = now - timedelta(days=7)
-        month_ago = now - timedelta(days=30)
         open_stages = [s for s in DealStage if s not in (DealStage.CLOSED_WON, DealStage.CLOSED_LOST)]
         pipeline_value = await _sum(session, select(func.sum(Deal.amount)).where(Deal.stage.in_(open_stages)))
         open_deals = await _count(session, select(func.count(Deal.id)).where(Deal.stage.in_(open_stages)))
@@ -81,7 +87,6 @@ class DashboardService:
         }
 
     async def _marketing(self, session):
-        now = datetime.utcnow()
         campaigns = (await session.execute(select(Campaign).order_by(Campaign.created_at.desc()).limit(50))).scalars().all()
         total_sent = await _count(session, select(func.count(CampaignRecipient.id)).where(CampaignRecipient.sent_at.is_not(None)))
         opened = await _count(session, select(func.count(CampaignRecipient.id)).where(CampaignRecipient.opened_at.is_not(None)))
@@ -115,68 +120,123 @@ class DashboardService:
         }
 
     async def _hr(self, session):
+        today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
         department = await session.scalar(select(Department).where(Department.key == "hr"))
         headcount = 0
         if department:
-            headcount = await _count(session, select(func.count(DepartmentMember.id)).where(DepartmentMember.department_id == department.id))
+            headcount = await _count(session, select(func.count(func.distinct(DepartmentMember.user_id))).where(DepartmentMember.department_id == department.id))
+        present_today = await _count(session, select(func.count(Attendance.id)).where(Attendance.date >= today, Attendance.status == "present"))
+        pending_leave = await _count(session, select(func.count(LeaveRequest.id)).where(LeaveRequest.status == "requested"))
+        on_leave = await _count(session, select(func.count(LeaveRequest.id)).where(LeaveRequest.status == "approved", LeaveRequest.start_date <= datetime.utcnow(), LeaveRequest.end_date >= datetime.utcnow()))
+        attendance_rows = (await session.execute(select(Attendance.status, func.count(Attendance.id)).where(Attendance.date >= today - timedelta(days=7)).group_by(Attendance.status))).all()
+        leave_rows = (await session.execute(select(LeaveRequest.type, func.count(LeaveRequest.id)).group_by(LeaveRequest.type))).all()
+        recent_leave = (await session.execute(select(LeaveRequest).order_by(LeaveRequest.created_at.desc()).limit(6))).scalars().all()
+        recent_attendance = (await session.execute(select(Attendance).order_by(Attendance.date.desc()).limit(6))).scalars().all()
+        alerts = []
+        if pending_leave:
+            alerts.append({"kind": "warning", "title": "Leave approvals", "body": f"{pending_leave} leave request(s) waiting for review."})
         return {
             "department": "hr",
             "kpis": [
                 {"label": "Headcount", "value": headcount, "format": "number", "sub": "HR department"},
-                {"label": "Open roles", "value": 0, "format": "number", "sub": "Recruitment module next phase"},
-                {"label": "Attendance today", "value": "—", "format": "text", "sub": "Phase 2"},
-                {"label": "Pending leave", "value": 0, "format": "number", "sub": "Phase 2"},
+                {"label": "Present today", "value": present_today, "format": "number", "sub": "Attendance records"},
+                {"label": "Pending leave", "value": pending_leave, "format": "number", "sub": "Awaiting approval"},
+                {"label": "On leave", "value": on_leave, "format": "number", "sub": "Approved today"},
+                {"label": "Attendance rate", "value": round((present_today / headcount) * 100, 1) if headcount else 0, "format": "percent", "sub": "Today"},
             ],
-            "charts": [],
-            "tables": [],
-            "alerts": [{"kind": "warning", "title": "HR module", "body": "Employee, attendance, leave and payroll simulation arrive in Phase 2."}],
+            "charts": [
+                {"title": "Attendance (7 days)", "type": "bar", "data": [{"label": status.title(), "value": count} for status, count in attendance_rows]},
+                {"title": "Leave by type", "type": "bar", "data": [{"label": type_.title(), "value": count} for type_, count in leave_rows]},
+            ],
+            "tables": [
+                {"title": "Recent leave requests", "columns": ["type", "start_date", "end_date", "status"], "rows": [{"id": r.id, "type": r.type, "start_date": _iso(r.start_date), "end_date": _iso(r.end_date), "status": r.status} for r in recent_leave]},
+                {"title": "Recent attendance", "columns": ["date", "hours", "status"], "rows": [{"id": r.id, "date": _iso(r.date), "hours": r.hours, "status": r.status} for r in recent_attendance]},
+            ],
+            "alerts": alerts or [{"kind": "info", "title": "HR module", "body": "Employee records, attendance, leave and payroll simulation are live."}],
         }
 
     async def _finance(self, session):
-        revenue = await _sum(session, select(func.sum(Deal.amount)).where(Deal.stage == DealStage.CLOSED_WON))
-        open_value = await _sum(session, select(func.sum(Deal.amount)).where(Deal.stage.notin_([DealStage.CLOSED_WON, DealStage.CLOSED_LOST])))
+        invoice_total = await _sum(session, select(func.sum(Invoice.amount)))
+        invoice_count = await _count(session, select(func.count(Invoice.id)))
+        open_invoices = await _count(session, select(func.count(Invoice.id)).where(Invoice.status == "open"))
+        expense_total = await _sum(session, select(func.sum(Expense.amount)))
+        expense_count = await _count(session, select(func.count(Expense.id)))
+        invoice_rows = (await session.execute(select(Invoice.status, func.count(Invoice.id), func.sum(Invoice.amount)).group_by(Invoice.status))).all()
+        expense_rows = (await session.execute(select(Expense.category, func.count(Expense.id), func.sum(Expense.amount)).group_by(Expense.category))).all()
+        recent_invoices = (await session.execute(select(Invoice).order_by(Invoice.created_at.desc()).limit(6))).scalars().all()
+        recent_expenses = (await session.execute(select(Expense).order_by(Expense.created_at.desc()).limit(6))).scalars().all()
         return {
             "department": "finance",
             "kpis": [
-                {"label": "Revenue", "value": revenue, "format": "currency", "sub": "Closed-won deals"},
-                {"label": "Open pipeline", "value": open_value, "format": "currency", "sub": "Forecastable"},
-                {"label": "Invoices", "value": 0, "format": "number", "sub": "Phase 3"},
-                {"label": "Expenses", "value": 0, "format": "currency", "sub": "Phase 3"},
+                {"label": "Invoiced", "value": invoice_total, "format": "currency", "sub": f"{invoice_count} invoices"},
+                {"label": "Open invoices", "value": open_invoices, "format": "number", "sub": "Awaiting payment"},
+                {"label": "Expenses", "value": expense_total, "format": "currency", "sub": f"{expense_count} entries"},
+                {"label": "Net", "value": invoice_total - expense_total, "format": "currency", "sub": "Invoiced minus expenses"},
             ],
-            "charts": [],
-            "tables": [],
-            "alerts": [{"kind": "warning", "title": "Finance module", "body": "Invoices, expenses and payments arrive in Phase 3."}],
+            "charts": [
+                {"title": "Invoices by status", "type": "bar", "data": [{"label": status.title(), "value": float(amount or 0), "count": count} for status, count, amount in invoice_rows]},
+                {"title": "Expenses by category", "type": "bar", "data": [{"label": (category or "Uncategorized").title(), "value": float(amount or 0), "count": count} for category, count, amount in expense_rows]},
+            ],
+            "tables": [
+                {"title": "Recent invoices", "columns": ["number", "amount", "status"], "rows": [{"id": r.id, "number": r.number, "amount": r.amount, "status": r.status} for r in recent_invoices]},
+                {"title": "Recent expenses", "columns": ["category", "amount", "status"], "rows": [{"id": r.id, "category": r.category, "amount": r.amount, "status": r.status} for r in recent_expenses]},
+            ],
+            "alerts": [{"kind": "info", "title": "Finance module", "body": "Invoices and expenses are live. Create entries from the Finance page."}],
         }
 
     async def _support(self, session):
-        tasks = await _count(session, select(func.count(Activity.id)).where(Activity.type == ActivityType.TASK))
+        total = await _count(session, select(func.count(SupportTicket.id)))
+        open_tickets = await _count(session, select(func.count(SupportTicket.id)).where(SupportTicket.status == "open"))
+        high_priority = await _count(session, select(func.count(SupportTicket.id)).where(SupportTicket.priority.in_(["high", "urgent"]), SupportTicket.status != "closed"))
+        resolved = await _count(session, select(func.count(SupportTicket.id)).where(SupportTicket.status.in_(["resolved", "closed"])))
+        status_rows = (await session.execute(select(SupportTicket.status, func.count(SupportTicket.id)).group_by(SupportTicket.status))).all()
+        priority_rows = (await session.execute(select(SupportTicket.priority, func.count(SupportTicket.id)).group_by(SupportTicket.priority))).all()
+        recent = (await session.execute(select(SupportTicket).order_by(SupportTicket.created_at.desc()).limit(6))).scalars().all()
         return {
             "department": "support",
             "kpis": [
-                {"label": "Open tickets", "value": 0, "format": "number", "sub": "Phase 3"},
-                {"label": "SLA breaches", "value": 0, "format": "number", "sub": "Phase 3"},
-                {"label": "Open tasks", "value": tasks, "format": "number", "sub": "From activity timeline"},
-                {"label": "CSAT", "value": "—", "format": "text", "sub": "Phase 3"},
+                {"label": "Open tickets", "value": open_tickets, "format": "number", "sub": f"{total} total"},
+                {"label": "High priority", "value": high_priority, "format": "number", "sub": "Needs attention"},
+                {"label": "Resolved", "value": resolved, "format": "number", "sub": "Resolved or closed"},
+                {"label": "Resolution rate", "value": round((resolved / total) * 100, 1) if total else 0, "format": "percent", "sub": "Of all tickets"},
             ],
-            "charts": [],
-            "tables": [],
-            "alerts": [{"kind": "warning", "title": "Support module", "body": "Tickets, SLA and AI triage arrive in Phase 3."}],
+            "charts": [
+                {"title": "Tickets by status", "type": "bar", "data": [{"label": status.title(), "value": count} for status, count in status_rows]},
+                {"title": "Tickets by priority", "type": "bar", "data": [{"label": priority.title(), "value": count} for priority, count in priority_rows]},
+            ],
+            "tables": [
+                {"title": "Recent tickets", "columns": ["subject", "status", "priority"], "rows": [{"id": r.id, "subject": r.subject, "status": r.status, "priority": r.priority} for r in recent]},
+            ],
+            "alerts": [{"kind": "warning", "title": "Support queue", "body": f"{high_priority} high-priority ticket(s) still open."}] if high_priority else [{"kind": "info", "title": "Support desk", "body": "No high-priority tickets waiting."}],
         }
 
     async def _operations(self, session):
         tasks = await _count(session, select(func.count(Activity.id)).where(Activity.type == ActivityType.TASK))
-        meetings = await _count(session, select(func.count(Activity.id)).where(Activity.type == ActivityType.MEETING))
+        assets = await _count(session, select(func.count(Asset.id)))
+        active_assets = await _count(session, select(func.count(Asset.id)).where(Asset.status == "active"))
+        requests = await _count(session, select(func.count(WorkRequest.id)))
+        open_requests = await _count(session, select(func.count(WorkRequest.id)).where(WorkRequest.status == "open"))
+        asset_rows = (await session.execute(select(Asset.status, func.count(Asset.id)).group_by(Asset.status))).all()
+        request_rows = (await session.execute(select(WorkRequest.status, func.count(WorkRequest.id)).group_by(WorkRequest.status))).all()
+        recent_assets = (await session.execute(select(Asset).order_by(Asset.created_at.desc()).limit(6))).scalars().all()
+        recent_requests = (await session.execute(select(WorkRequest).order_by(WorkRequest.created_at.desc()).limit(6))).scalars().all()
         return {
             "department": "operations",
             "kpis": [
                 {"label": "Open tasks", "value": tasks, "format": "number", "sub": "Activity tasks"},
-                {"label": "Meetings", "value": meetings, "format": "number", "sub": "Logged meetings"},
-                {"label": "Assets", "value": 0, "format": "number", "sub": "Phase 3"},
-                {"label": "Requests", "value": 0, "format": "number", "sub": "Phase 3"},
+                {"label": "Assets", "value": assets, "format": "number", "sub": f"{active_assets} active"},
+                {"label": "Open requests", "value": open_requests, "format": "number", "sub": f"{requests} total"},
+                {"label": "Asset uptime", "value": round((active_assets / assets) * 100, 1) if assets else 0, "format": "percent", "sub": "Active assets"},
             ],
-            "charts": [],
-            "tables": [],
-            "alerts": [{"kind": "warning", "title": "Operations module", "body": "Tasks, assets and requests arrive in Phase 3."}],
+            "charts": [
+                {"title": "Assets by status", "type": "bar", "data": [{"label": status.title(), "value": count} for status, count in asset_rows]},
+                {"title": "Requests by status", "type": "bar", "data": [{"label": status.title(), "value": count} for status, count in request_rows]},
+            ],
+            "tables": [
+                {"title": "Recent assets", "columns": ["name", "type", "status"], "rows": [{"id": r.id, "name": r.name, "type": r.type, "status": r.status} for r in recent_assets]},
+                {"title": "Recent requests", "columns": ["title", "status"], "rows": [{"id": r.id, "title": r.title, "status": r.status} for r in recent_requests]},
+            ],
+            "alerts": [{"kind": "info", "title": "Operations module", "body": "Tasks, assets and requests are live."}],
         }
 
     async def _executive(self, session):
@@ -189,16 +249,16 @@ class DashboardService:
         return {
             "department": "executive",
             "kpis": [
-                {"label": "Revenue", "value": next((k["value"] for k in finance["kpis"] if k["label"] == "Revenue"), 0), "format": "currency", "sub": "Closed won"},
+                {"label": "Revenue", "value": next((k["value"] for k in finance["kpis"] if k["label"] == "Invoiced"), 0), "format": "currency", "sub": "Invoiced"},
                 {"label": "Pipeline", "value": next((k["value"] for k in sales["kpis"] if k["label"] == "Pipeline value"), 0), "format": "currency", "sub": "Open deals"},
-                {"label": "Campaigns", "value": next((k["value"] for k in marketing["kpis"] if k["label"] == "Campaigns"), 0), "format": "number", "sub": "Marketing"},
                 {"label": "Headcount", "value": next((k["value"] for k in hr["kpis"] if k["label"] == "Headcount"), 0), "format": "number", "sub": "HR"},
-                {"label": "Open tasks", "value": next((k["value"] for k in operations["kpis"] if k["label"] == "Open tasks"), 0), "format": "number", "sub": "Operations"},
+                {"label": "Open tickets", "value": next((k["value"] for k in support["kpis"] if k["label"] == "Open tickets"), 0), "format": "number", "sub": "Support"},
+                {"label": "Open requests", "value": next((k["value"] for k in operations["kpis"] if k["label"] == "Open requests"), 0), "format": "number", "sub": "Operations"},
             ],
-            "charts": sales["charts"] + marketing["charts"],
-            "tables": sales["tables"] + marketing["tables"],
+            "charts": sales["charts"] + marketing["charts"] + support["charts"],
+            "tables": sales["tables"] + marketing["tables"] + support["tables"] + operations["tables"],
             "alerts": [
-                {"kind": "info", "title": "Executive view", "body": "Cross-department metrics are live. HR, support and finance modules land in later phases."},
+                {"kind": "info", "title": "Executive view", "body": "Cross-department metrics are live across sales, marketing, HR, finance, support and operations."},
             ],
             "departments": {
                 "sales": sales["kpis"],

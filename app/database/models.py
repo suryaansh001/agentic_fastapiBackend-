@@ -1018,3 +1018,81 @@ class AppConfig(Base):
     key: Mapped[str] = mapped_column(String, primary_key=True)
     value: Mapped[dict] = mapped_column(JSON, nullable=False, default="{}")
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+
+
+class Attendance(Base):
+    __tablename__ = "hr_attendance"
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id: Mapped[str] = mapped_column(String, ForeignKey("user.id"), nullable=False, index=True)
+    date: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    hours: Mapped[float] = mapped_column(Float, default=8.0)
+    status: Mapped[str] = mapped_column(String, default="present")
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class LeaveRequest(Base):
+    __tablename__ = "hr_leave_request"
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id: Mapped[str] = mapped_column(String, ForeignKey("user.id"), nullable=False, index=True)
+    type: Mapped[str] = mapped_column(String, default="vacation")
+    start_date: Mapped[datetime] = mapped_column(DateTime)
+    end_date: Mapped[datetime] = mapped_column(DateTime)
+    days: Mapped[int] = mapped_column(Integer, default=1)
+    status: Mapped[str] = mapped_column(String, default="requested")
+    reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class SupportTicket(Base):
+    __tablename__ = "support_ticket"
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    subject: Mapped[str] = mapped_column(String, nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    contact_id: Mapped[Optional[str]] = mapped_column(String, ForeignKey("contact.id"), nullable=True, index=True)
+    company_id: Mapped[Optional[str]] = mapped_column(String, ForeignKey("company.id"), nullable=True)
+    status: Mapped[str] = mapped_column(String, default="open", index=True)
+    priority: Mapped[str] = mapped_column(String, default="medium")
+    owner_id: Mapped[Optional[str]] = mapped_column(String, ForeignKey("user.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+
+
+class Invoice(Base):
+    __tablename__ = "invoice"
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    company_id: Mapped[str] = mapped_column(String, ForeignKey("company.id"), nullable=False, index=True)
+    number: Mapped[str] = mapped_column(String, unique=True, nullable=False)
+    amount: Mapped[float] = mapped_column(Float, default=0.0)
+    currency: Mapped[str] = mapped_column(String, default="USD")
+    status: Mapped[str] = mapped_column(String, default="open", index=True)
+    due_date: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class Expense(Base):
+    __tablename__ = "expense"
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id: Mapped[Optional[str]] = mapped_column(String, ForeignKey("user.id"), nullable=True)
+    category: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    amount: Mapped[float] = mapped_column(Float, default=0.0)
+    currency: Mapped[str] = mapped_column(String, default="USD")
+    date: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    status: Mapped[str] = mapped_column(String, default="draft", index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class Asset(Base):
+    __tablename__ = "asset"
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    type: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    status: Mapped[str] = mapped_column(String, default="active", index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class WorkRequest(Base):
+    __tablename__ = "work_request"
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    title: Mapped[str] = mapped_column(String, nullable=False)
+    status: Mapped[str] = mapped_column(String, default="open", index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

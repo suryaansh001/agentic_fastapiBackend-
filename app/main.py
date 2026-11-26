@@ -31,6 +31,11 @@ def setup_app(app: FastAPI) -> None:
     from app.settings.router import router as settings_router
     from app.departments.router import router as departments_router
     from app.campaigns.router import router as campaigns_router
+    from app.hr.router import router as hr_router
+    from app.support.router import router as support_router
+    from app.finance.router import router as finance_router
+    from app.operations.router import router as operations_router
+    from app.governance.router import router as governance_router
     from app.emails.router import router as emails_router
     from app.analytics.router import router as analytics_router
     from app.saved_views.router import router as saved_views_router
@@ -69,6 +74,11 @@ def setup_app(app: FastAPI) -> None:
     app.include_router(settings_router, prefix="/api/settings")
     app.include_router(departments_router, prefix="/api/departments")
     app.include_router(campaigns_router, prefix="/api/campaigns")
+    app.include_router(hr_router, prefix="/api/hr")
+    app.include_router(support_router, prefix="/api/support")
+    app.include_router(finance_router, prefix="/api/finance")
+    app.include_router(operations_router, prefix="/api/operations")
+    app.include_router(governance_router, prefix="/api/governance")
     app.include_router(emails_router, prefix="/api/emails")
     app.include_router(analytics_router, prefix="/api/analytics")
     app.include_router(saved_views_router, prefix="/api/saved-views")
